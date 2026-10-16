@@ -1,10 +1,11 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn import run
 
 from app.config import AppSettings
 
-from .models import SimulateRequest, SimulateResponse
+from .models import CompareResponse, SimulateRequest, SimulateResponse
+from .service import compare_scenarios, run_simulation
 
 app = FastAPI(debug=AppSettings.DEBUG)
 
@@ -19,8 +20,30 @@ app.add_middleware(
 
 @app.post("/api/simulate/", response_model=SimulateResponse)
 async def simulate(payload: SimulateRequest) -> SimulateResponse:
-    # TODO: вызвать сервис симуляции (payload -> SimulateResponse)
-    raise HTTPException(status_code=501, detail="Not implemented")
+    data = run_simulation(
+        rows=payload.rows,
+        cols=payload.cols,
+        initial_infected=payload.initial_infected,
+        days=payload.days,
+        seed=payload.seed,
+        disease=payload.disease.model_dump(),
+        interventions=[item.model_dump() for item in payload.interventions],
+    )
+    return SimulateResponse.model_validate(data)
+
+
+@app.post("/api/compare/", response_model=CompareResponse)
+async def compare(payload: SimulateRequest) -> CompareResponse:
+    data = compare_scenarios(
+        rows=payload.rows,
+        cols=payload.cols,
+        initial_infected=payload.initial_infected,
+        days=payload.days,
+        seed=payload.seed,
+        disease=payload.disease.model_dump(),
+        interventions=[item.model_dump() for item in payload.interventions],
+    )
+    return CompareResponse.model_validate(data)
 
 
 def main() -> None:

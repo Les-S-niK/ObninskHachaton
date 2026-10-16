@@ -1,7 +1,6 @@
-"""Ядро симуляции агроэпидемии. Не зависит от FastAPI и HTTP."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -60,7 +59,9 @@ def build_isolation_mask(
     return distance_squared <= radius**2
 
 
-def count_infected_neighbors(grid: np.ndarray, isolation_mask: np.ndarray | None = None) -> np.ndarray:
+def count_infected_neighbors(
+    grid: np.ndarray, isolation_mask: np.ndarray | None = None
+) -> np.ndarray:
     """Посчитать заражённых соседей Мура без перехода через края сетки.
 
     Если задана маска изоляции, заражение не проходит между клетками,
@@ -75,7 +76,6 @@ def count_infected_neighbors(grid: np.ndarray, isolation_mask: np.ndarray | None
 
     counts = np.zeros((rows, cols), dtype=np.uint8)
 
-    # Каждая пара срезов сопоставляет клетку-получателя и одного её соседа.
     shifts = (
         ((slice(1, None), slice(None)), (slice(None, -1), slice(None))),  # сверху
         ((slice(None, -1), slice(None)), (slice(1, None), slice(None))),  # снизу
@@ -98,7 +98,7 @@ def count_infected_neighbors(grid: np.ndarray, isolation_mask: np.ndarray | None
 def calculate_metrics(
     grid: np.ndarray,
     isolation_mask: np.ndarray,
-    cumulative_cost: int | float,
+    cumulative_cost: float,
 ) -> dict[str, int | float]:
     """Посчитать статистику одного кадра."""
     return {
@@ -115,7 +115,7 @@ def _make_frame(
     day: int,
     grid: np.ndarray,
     isolation_mask: np.ndarray,
-    cumulative_cost: int | float,
+    cumulative_cost: float,
 ) -> dict[str, Any]:
     return {
         "day": day,
@@ -153,7 +153,9 @@ def _validate_interventions(
         kind = intervention.get("type")
         day = int(intervention.get("day", 0))
         if not 1 <= day <= days:
-            raise ValueError(f"Вмешательство #{index + 1}: day должен быть от 1 до {days}.")
+            raise ValueError(
+                f"Вмешательство #{index + 1}: day должен быть от 1 до {days}."
+            )
         intervention["day"] = day
 
         if kind == "remove_infected":
@@ -200,8 +202,6 @@ def run_simulation(
     Кадр day=0 содержит исходную сетку; последующие кадры фиксируют итог дня.
     Изоляция остаётся активной до конца эксперимента и сама по себе не удаляет растения.
     """
-    if not isinstance(rows, int) or not isinstance(cols, int):
-        raise ValueError("rows и cols должны быть целыми числами.")
     if not (10 <= rows <= 50 and 10 <= cols <= 50):
         raise ValueError("Размеры сетки должны быть в диапазоне от 10 до 50.")
     if not isinstance(days, int) or not 1 <= days <= 100:
@@ -224,7 +224,9 @@ def run_simulation(
         by_day.setdefault(intervention["day"], []).append(intervention)
 
     cumulative_cost: int | float = 0
-    frames: list[dict[str, Any]] = [_make_frame(0, grid, isolation_mask, cumulative_cost)]
+    frames: list[dict[str, Any]] = [
+        _make_frame(0, grid, isolation_mask, cumulative_cost)
+    ]
     applied_interventions: list[dict[str, Any]] = []
 
     for day in range(1, days + 1):
@@ -236,28 +238,35 @@ def run_simulation(
                 grid[infected_now] = REMOVED
                 cost = removed_count * intervention["cost_per_plant"]
                 cumulative_cost += cost
-                applied_interventions.append({
-                    "type": "remove_infected",
-                    "day": day,
-                    "removed_count": removed_count,
-                    "cost_per_plant": intervention["cost_per_plant"],
-                    "cost": cost,
-                })
+                applied_interventions.append(
+                    {
+                        "type": "remove_infected",
+                        "day": day,
+                        "removed_count": removed_count,
+                        "cost_per_plant": intervention["cost_per_plant"],
+                        "cost": cost,
+                    }
+                )
             else:  # isolate_zone
-                zone_mask = build_isolation_mask(rows, cols, intervention["center"], intervention["radius"])
+                zone_mask = build_isolation_mask(
+                    rows, cols, intervention["center"], intervention["radius"]
+                )
                 zone_size = int(np.count_nonzero(zone_mask))
                 isolation_mask |= zone_mask
                 cost = zone_size * intervention["cost_per_cell"]
                 cumulative_cost += cost
-                applied_interventions.append({
-                    "type": "isolate_zone",
-                    "day": day,
-                    "center": intervention["center"],
-                    "radius": intervention["radius"],
-                    "zone_size": zone_size,
-                    "cost_per_cell": intervention["cost_per_cell"],
-                    "cost": cost,
-                })
+                applied_interventions.append(
+                    {
+                        "type": "isolate_zone",
+                        "day": day,
+                        "center": intervention["center"],
+                        "radius": intervention["radius"],
+                        "zone_size": zone_size,
+                        "removed_inside": 0,
+                        "cost_per_cell": intervention["cost_per_cell"],
+                        "cost": cost,
+                    }
+                )
 
         # Фиксированное число случайных выборок на день обеспечивает сопоставимость
         # сценариев с одинаковыми seed: значения привязаны к координатам клеток.
@@ -276,8 +285,10 @@ def run_simulation(
         ever_infected |= newly_infected
 
         recovered_now = infected_at_start & (outcome_draws < recovery_prob)
-        removed_now = infected_at_start & (outcome_draws >= recovery_prob) & (
-            outcome_draws < recovery_prob + removal_prob
+        removed_now = (
+            infected_at_start
+            & (outcome_draws >= recovery_prob)
+            & (outcome_draws < recovery_prob + removal_prob)
         )
         next_grid[recovered_now] = RECOVERED
         next_grid[removed_now] = REMOVED
@@ -301,7 +312,7 @@ def run_simulation(
         "peak_day": int(peak_day),
     }
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
     scenario_id = f"sim_{seed}_{timestamp}_{uuid4().hex[:6]}"
     return {
         "scenario_id": scenario_id,
@@ -348,22 +359,30 @@ def compare_scenarios(
         "total_infected": {
             "baseline": baseline["summary"]["total_infected"],
             "intervention": intervention_result["summary"]["total_infected"],
-            "change": intervention_result["summary"]["total_infected"] - baseline["summary"]["total_infected"],
+            "change": intervention_result["summary"]["total_infected"]
+            - baseline["summary"]["total_infected"],
         },
         "saved": {
             "baseline": baseline["summary"]["saved"],
             "intervention": intervention_result["summary"]["saved"],
-            "change": intervention_result["summary"]["saved"] - baseline["summary"]["saved"],
+            "change": intervention_result["summary"]["saved"]
+            - baseline["summary"]["saved"],
         },
         "removed": {
             "baseline": baseline["summary"]["removed"],
             "intervention": intervention_result["summary"]["removed"],
-            "change": intervention_result["summary"]["removed"] - baseline["summary"]["removed"],
+            "change": intervention_result["summary"]["removed"]
+            - baseline["summary"]["removed"],
         },
         "cost": {
             "baseline": baseline["summary"]["cost"],
             "intervention": intervention_result["summary"]["cost"],
-            "change": intervention_result["summary"]["cost"] - baseline["summary"]["cost"],
+            "change": intervention_result["summary"]["cost"]
+            - baseline["summary"]["cost"],
         },
     }
-    return {"baseline": baseline, "intervention": intervention_result, "comparison": comparison}
+    return {
+        "baseline": baseline,
+        "intervention": intervention_result,
+        "comparison": comparison,
+    }

@@ -3,10 +3,6 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-# ---------------------------------------------------------------------------
-# Общие типы
-# ---------------------------------------------------------------------------
-
 
 class CellState(IntEnum):
     HEALTHY = 0
@@ -17,11 +13,6 @@ class CellState(IntEnum):
 
 Coord = Annotated[list[int], Field(min_length=2, max_length=2)]  # [row, col]
 Grid = list[list[int]]  # rows x cols
-
-
-# ---------------------------------------------------------------------------
-# Запрос
-# ---------------------------------------------------------------------------
 
 
 class DiseaseParams(BaseModel):
@@ -92,15 +83,11 @@ class SimulateRequest(BaseModel):
         return self
 
 
-# ---------------------------------------------------------------------------
-# Ответ
-# ---------------------------------------------------------------------------
-
-
 class AppliedRemoveInfected(BaseModel):
     type: Literal["remove_infected"]
     day: int
     removed_count: int
+    coord: Coord
     cost: float
 
 
@@ -126,7 +113,7 @@ class Metrics(BaseModel):
     recovered: int
     removed: int
     isolated: int
-    cost: float  # накопленная стоимость к этому дню
+    cost: float
 
 
 class Frame(BaseModel):
@@ -145,6 +132,20 @@ class Summary(BaseModel):
     loss: int
     peak_infected: int
     peak_day: int
+
+
+class ComparisonEntry(BaseModel):
+    baseline: float
+    intervention: float
+    change: float = Field(
+        description="intervention - baseline. Отрицательное значение = снижение метрики."
+    )
+
+
+class CompareResponse(BaseModel):
+    baseline: SimulateResponse
+    intervention: SimulateResponse
+    comparison: dict[str, ComparisonEntry]
 
 
 class SimulateResponse(BaseModel):
