@@ -1,0 +1,19 @@
+[project]
+name = "obninskhachaton"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Les_S_niK", email = "lessnik343@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi[standart]>=0.143.2",
+]
+
+[project.scripts]
+obninskhachaton = "obninskhachaton:main"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"
