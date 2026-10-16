@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Агроэпидемия: Симулятор теплицы</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <!-- Левая панель -->
+    <div class="sidebar">
+        <h2>Режим симуляции</h2>
+
+        <!-- Две кнопки режима в одном ряду -->
+        <div class="mode-row">
+            <button class="btn-mode active" id="btn-none" onclick="setMode('none')">
+                Без вмешательства
+            </button>
+            <button class="btn-mode" id="btn-measure" onclick="setMode('measure')">
+                С вмешательством
+            </button>
+        </div>
+
+        <button class="btn-new" onclick="runSimulation()">Запустить симуляцию</button>
+        <button class="btn-new btn-danger" onclick="resetSimulation()">Сброс</button>
+
+        <div class="sidebar-footer">
+            <p><b>Статус:</b> <span id="status-text">Ожидание</span></p>
+            <p class="disclaimer">
+                * Модель предназначена исключительно для обучения алгоритмам. 
+                Не является инструментом принятия решений о реальных обработках.
+            </p>
+        </div>
+    </div>
+
+    <!-- Центр: сетка и таймлайн -->
+    <div class="main-content">
+        <h2 class="main-title">Теплица 10×10</h2>
+        <div class="greenhouse-grid" id="grid"></div>
+
+        <div class="timeline">
+            <button class="btn-arrow" onclick="prevDay()" id="btn-prev" disabled>◀</button>
+            <div class="day-display">День: <span id="current-day">0</span> / 20</div>
+            <input type="range" id="day-slider" min="0" max="20" value="0" oninput="goToDay(this.value)" disabled>
+            <button class="btn-arrow" onclick="nextDay()" id="btn-next" disabled>▶</button>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item"><div class="legend-color healthy"></div> Обычное</div>
+            <div class="legend-item"><div class="legend-color risk"></div> Риск</div>
+            <div class="legend-item"><div class="legend-color infected"></div> Заразное</div>
+            <div class="legend-item"><div class="legend-color recovered"></div> Выздоровело</div>
+            <div class="legend-item"><div class="legend-color removed"></div> Выкопали</div>
+        </div>
+    </div>
+
+    <!-- Правая панель -->
+    <div class="stats-panel">
+        <h2>Статистика дня</h2>
+        <div class="stat-item"><span>Обычные:</span> <span class="stat-value" id="stat-healthy">100</span></div>
+        <div class="stat-item"><span>В зоне риска:</span> <span class="stat-value" id="stat-risk">0</span></div>
+        <div class="stat-item"><span>Заразные:</span> <span class="stat-value" id="stat-infected">0</span></div>
+        <div class="stat-item"><span>Выздоровело:</span> <span class="stat-value" id="stat-recovered">0</span></div>
+        <div class="stat-item"><span>Выкопали:</span> <span class="stat-value" id="stat-removed">0</span></div>
+        <div class="stat-item"><span>Расходы:</span> <span class="stat-value" id="stat-cost">0</span></div>
+
+        <h3>Динамика за 20 дней</h3>
+        <div class="chart-container">
+            <canvas id="infectionChart"></canvas>
+        </div>
+    </div>
+
+    <script src="logic.js"></script>
+    <script src="ui.js"></script>
+</body>
+</html>

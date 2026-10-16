@@ -1,0 +1,235 @@
+/* Сброс стилей */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 40%, #a5d6a7 70%, #81c784 100%);
+    background-attachment: fixed;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Левая панель */
+.sidebar {
+    width: 340px;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 20px;
+    box-shadow: 2px 0 20px rgba(45, 90, 45, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.sidebar h2 { font-size: 1.2rem; color: #2c3e50; }
+
+/* Ряд с двумя кнопками режима */
+.mode-row {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-mode {
+    flex: 1;
+    padding: 14px 8px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    border: 2px solid #546E7A;
+    border-radius: 10px;
+    cursor: pointer;
+    color: #546E7A;
+    background: #fff;
+    transition: 0.25s;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.btn-mode:hover {
+    background: #ECEFF1;
+}
+
+/* Активная кнопка */
+.btn-mode.active {
+    background: #4CAF50;
+    border-color: #4CAF50;
+    color: #fff;
+}
+
+.btn-mode.active:hover {
+    background: #45a049;
+}
+
+/* Кнопка запуска — мятная */
+.btn-new {
+    padding: 15px;
+    text-align: center;
+    color: #1b5e20;
+    border-radius: 10px;
+    border: 2px solid #a5d6a7;
+    font-weight: bold;
+    font-size: 1.05rem;
+    cursor: pointer;
+    background: #c8e6c9;
+    transition: 0.25s;
+}
+
+.btn-new:hover {
+    background: #a5d6a7;
+}
+
+.btn-new:active { transform: scale(0.98); }
+.btn-new:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Кнопка сброса — тёмно-зелёная */
+.btn-danger {
+    background: #2E7D32;
+    border-color: #1b5e20;
+    color: #fff;
+}
+
+.btn-danger:hover {
+    background: #1b5e20;
+}
+
+/* Футер левой панели */
+.sidebar-footer { margin-top: auto; font-size: 0.85rem; color: #555; }
+.sidebar-footer .disclaimer {
+    font-size: 0.7rem;
+    margin-top: 10px;
+    line-height: 1.3;
+    color: #888;
+}
+
+/* Центральная зона */
+.main-content {
+    flex: 1;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.main-title {
+    margin-bottom: 15px;
+    color: #1b5e20;
+    font-size: 1.3rem;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6);
+}
+
+.greenhouse-grid {
+    display: grid;
+    grid-template-columns: repeat(10, 45px);
+    grid-template-rows: repeat(10, 45px);
+    gap: 3px;
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(45, 90, 45, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+/* Клетки */
+.cell {
+    width: 45px;
+    height: 45px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.healthy   { background-color: #ffffff; }
+.risk      { background-color: #FFEB3B; }
+.infected  { background-color: #F44336; }
+.recovered { background-color: #4CAF50; }
+.removed   { background-color: #212121; }
+
+/* Таймлайн */
+.timeline {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-top: 25px;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 10px 20px;
+    border-radius: 30px;
+    box-shadow: 0 4px 15px rgba(45, 90, 45, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.day-display {
+    font-weight: bold;
+    font-size: 1.1rem;
+    color: #2c3e50;
+    min-width: 120px;
+    text-align: center;
+}
+
+.btn-arrow {
+    background: #e0e0e0;
+    color: #333;
+    padding: 8px 15px;
+    border-radius: 50%;
+    font-size: 1.2rem;
+    border: none;
+    cursor: pointer;
+    transition: 0.2s;
+}
+.btn-arrow:hover:not(:disabled) { background: #bdbdbd; }
+.btn-arrow:disabled { opacity: 0.5; cursor: not-allowed; }
+
+input[type="range"] { width: 300px; cursor: pointer; }
+
+/* Легенда */
+.legend {
+    display: flex;
+    gap: 15px;
+    margin-top: 20px;
+    font-size: 0.85rem;
+    color: #1b5e20;
+    flex-wrap: wrap;
+    justify-content: center;
+    font-weight: 500;
+}
+
+.legend-item { display: flex; align-items: center; gap: 8px; }
+.legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+/* Правая панель */
+.stats-panel {
+    width: 350px;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 20px;
+    box-shadow: -2px 0 20px rgba(45, 90, 45, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.stats-panel h2 { font-size: 1.2rem; color: #2c3e50; }
+.stats-panel h3 { font-size: 1rem; color: #2c3e50; margin-top: 10px; }
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.05rem;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(129, 199, 132, 0.3);
+}
+
+.stat-value { font-weight: bold; color: #2c3e50; }
+
+.chart-container { position: relative; height: 300px; width: 100%; margin-top: 10px; }
