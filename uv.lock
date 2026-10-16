@@ -68,7 +68,7 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "fastapi", extras = ["standart"], specifier = ">=0.143.2" }]
+requires-dist = [{ name = "fastapi", specifier = ">=0.143.2" }]
 
 [[package]]
 name = "opentelemetry-api"
