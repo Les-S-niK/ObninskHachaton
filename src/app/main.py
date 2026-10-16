@@ -1,11 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn import run
 
 from app.config import AppSettings
 
-app = FastAPI(debug=AppSettings.DEBUG)
+from .models import SimulateRequest, SimulateResponse
 
+app = FastAPI(debug=AppSettings.DEBUG)
 
 app.add_middleware(
     CORSMiddleware,
@@ -14,6 +15,12 @@ app.add_middleware(
     allow_methods=AppSettings.CORS.ALLOW_METHODS,
     allow_headers=AppSettings.CORS.ALLOW_HEADERS,
 )
+
+
+@app.post("/api/simulate/", response_model=SimulateResponse)
+async def simulate(payload: SimulateRequest) -> SimulateResponse:
+    # TODO: вызвать сервис симуляции (payload -> SimulateResponse)
+    raise HTTPException(status_code=501, detail="Not implemented")
 
 
 def main() -> None:
