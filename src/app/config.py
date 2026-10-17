@@ -4,8 +4,8 @@ from typing import ClassVar
 
 @dataclass
 class AppSettings:
-    HOST: ClassVar[str] = "127.0.0.1"
-    PORT: ClassVar[int] = 8080
+    HOST: ClassVar[str] = "0.0.0.0"
+    PORT: ClassVar[int] = 80
     DEBUG: ClassVar[bool] = True
 
     class CORS:
@@ -13,6 +13,8 @@ class AppSettings:
             "http://localhost",
             "http://127.0.0.1",
             "http://0.0.0.0",
+            "http://0.0.0.0:80",
+            "http://localhost:80",
             "http://localhost:8080",
         ]
         ALLOW_CREDENTIALS: ClassVar[bool] = True
