@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Агроэпидемия — симулятор</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; background: #f4f6f8; color: #1f2933; }
+  header { background: #1f6f43; color: #fff; padding: 12px 20px; }
+  header h1 { margin: 0; font-size: 20px; }
+  main { padding: 16px 20px; max-width: 1200px; margin: 0 auto; }
+  .card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.1); margin-bottom: 16px; }
+  .card h2, .card h3 { margin-top: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+  label { display: block; font-size: 12px; color: #616e7c; margin-bottom: 4px; }
+  input, select { padding: 6px 8px; border: 1px solid #cbd2d9; border-radius: 6px; font-size: 14px; }
+  button { padding: 8px 14px; border: none; border-radius: 6px; background: #1f6f43; color: #fff; font-size: 14px; cursor: pointer; }
+  button.secondary { background: #52606d; }
+  button.danger { background: #c0392b; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .grids { display: flex; gap: 24px; flex-wrap: wrap; }
+  .grid-box { flex: 1 1 380px; min-width: 300px; }
+  .grid-box h3 { margin: 0 0 8px; font-size: 16px; }
+  canvas { border: 1px solid #cbd2d9; border-radius: 6px; background: #fff; display: block; }
+  canvas.clickable { cursor: crosshair; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; margin-top: 10px; }
+  .metric { background: #f0f4f8; border-radius: 6px; padding: 6px 8px; text-align: center; }
+  .metric .v { font-size: 18px; font-weight: 600; }
+  .metric .l { font-size: 11px; color: #616e7c; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; margin-top: 12px; }
+  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .toolbar label { margin: 0; font-size: 13px; color: #1f2933; }
+  .log { max-height: 170px; overflow: auto; font-size: 12px; background: #f8fafc; border: 1px solid #e1e8ed; border-radius: 6px; padding: 8px; }
+  .log div { padding: 2px 0; border-bottom: 1px dashed #e1e8ed; }
+  .status { font-size: 13px; color: #616e7c; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid #e1e8ed; padding: 5px 8px; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  .delta-pos { color: #c0392b; }
+  .delta-neg { color: #1f6f43; }
+</style>
+</head>
+<body>
+<header><h1>Агроэпидемия: останови заражение теплицы</h1></header>
+<main>
+  <section class="card" id="setupCard">
+    <h2>Параметры</h2>
+    <div class="row">
+      <div><label>Строки</label><input id="rows" type="number" min="10" max="50" value="15"></div>
+      <div><label>Столбцы</label><input id="cols" type="number" min="10" max="50" value="15"></div>
+      <div><label>Дней</label><input id="days" type="number" min="1" max="100" value="20"></div>
+      <div><label>Seed</label><input id="seed" type="number" value="42"></div>
+      <div><label>P(заражение)</label><input id="infection_prob" type="number" step="0.01" min="0" max="1" value="0.15"></div>
+      <div><label>P(выздоровление)</label><input id="recovery_prob" type="number" step="0.01" min="0" max="1" value="0.05"></div>
+      <div><label>P(удаление)</label><input id="removal_prob" type="number" step="0.01" min="0" max="1" value="0.03"></div>
+    </div>
+    <p class="status">Выберите 1–3 начальных очага на поле (клик — добавить/убрать).</p>
+    <canvas id="setupCanvas" class="clickable" width="450" height="450"></canvas>
+    <div class="toolbar" style="margin-top:12px">
+      <button id="createBtn">Создать симуляции</button>
+      <button id="randomSeed" class="secondary">Случайный seed</button>
+    </div>
+  </section>
+
+  <section id="playback" style="display:none">
+    <div class="card">
+      <div class="toolbar">
+        <button id="stepBtn">Шаг ▶</button>
+        <button id="playBtn" class="secondary">Запустить</button>
+        <button id="resetBtn" class="danger">Сброс</button>
+        <span class="status" id="status"></span>
+      </div>
+      <div class="toolbar">
+        <span class="status">Режим:</span>
+        <label><input type="radio" name="mode" value="remove" checked> Удалить растение</label>
+        <label><input type="radio" name="mode" value="isolate"> Изолировать зону</label>
+        <label>Радиус <input id="radius" type="number" min="0" max="20" value="2" style="width:60px"></label>
+        <label>Цена удаления <input id="costPlant" type="number" min="0" value="10" style="width:70px"></label>
+        <label>Цена изоляции/клетку <input id="costCell" type="number" min="0" value="2" style="width:80px"></label>
+      </div>
+      <div class="grids">
+        <div class="grid-box">
+          <h3>Без вмешательства</h3>
+          <canvas id="baselineCanvas"></canvas>
+          <div class="metrics" id="baselineMetrics"></div>
+        </div>
+        <div class="grid-box">
+          <h3>С вмешательствами (клик — применить)</h3>
+          <canvas id="interventionCanvas" class="clickable"></canvas>
+          <div class="metrics" id="interventionMetrics"></div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><span class="swatch" style="background:#4caf50"></span>здоровое</span>
+        <span><span class="swatch" style="background:#e53935"></span>заражено</span>
+        <span><span class="swatch" style="background:#1e88e5"></span>выздоровело</span>
+        <span><span class="swatch" style="background:#9e9e9e"></span>удалено</span>
+        <span><span class="swatch" style="background:rgba(255,193,7,.4);border:1px solid #f9a825"></span>изоляция</span>
+        <span><span class="swatch" style="background:transparent;border:2px solid #000"></span>последнее действие</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Сравнение</h3>
+      <table id="compareTable"></table>
+    </div>
+
+    <div class="card">
+      <h3>Журнал вмешательств</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+
+const COLORS = { 0: '#4caf50', 1: '#e53935', 2: '#1e88e5', 3: '#9e9e9e' };
+const MAX_CELLS = 3;
+const SETUP_MAX_PX = 450;
+
+const state = {
+  rows: 15, cols: 15, days: 20, seed: 42,
+  infection_prob: 0.15, recovery_prob: 0.05, removal_prob: 0.03,
+  initial: new Set(),
+  baselineId: null, interventionId: null,
+  baseline: null, intervention: null,
+  playing: false, timer: null,
+  lastAction: null,
+};
+
+function cellSize(cols) { return Math.max(4, Math.floor(SETUP_MAX_PX / cols)); }
+
+function drawSetup() {
+  const canvas = $('setupCanvas');
+  const cols = +$('cols').value, rows = +$('rows').value;
+  const cs = cellSize(cols);
+  canvas.width = cols * cs; canvas.height = rows * cs;
+  const ctx = canvas.getContext('2d');
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      ctx.fillStyle = state.initial.has(r + ',' + c) ? '#e53935' : '#4caf50';
+      ctx.fillRect(c * cs, r * cs, cs - 1, cs - 1);
+    }
+  }
+}
+
+$('setupCanvas').addEventListener('click', e => {
+  const canvas = e.target;
+  const rect = canvas.getBoundingClientRect();
+  const cols = +$('cols').value, rows = +$('rows').value;
+  const cs = cellSize(cols);
+  const c = Math.floor((e.clientX - rect.left) / cs);
+  const r = Math.floor((e.clientY - rect.top) / cs);
+  if (r < 0 || r >= rows || c < 0 || c >= cols) return;
+  const key = r + ',' + c;
+  if (state.initial.has(key)) state.initial.delete(key);
+  else {
+    if (state.initial.size >= MAX_CELLS) { alert('Максимум ' + MAX_CELLS + ' очага'); return; }
+    state.initial.add(key);
+  }
+  drawSetup();
+});
+
+function buildPayload() {
+  return {
+    rows: +$('rows').value,
+    cols: +$('cols').value,
+    days: +$('days').value,
+    seed: +$('seed').value,
+    initial_infected: [...state.initial].map(s => s.split(',').map(Number)),
+    disease: {
+      infection_prob: +$('infection_prob').value,
+      recovery_prob: +$('recovery_prob').value,
+      removal_prob: +$('removal_prob').value,
+    },
+    interventions: [],
+  };
+}
+
+async function post(url, body) {
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  return resp.json();
+}
+
+async function createSimulations() {
+  const payload = buildPayload();
+  if (payload.initial_infected.length === 0) { alert('Выберите хотя бы один очаг'); return; }
+  try {
+    const [baseline, intervention] = await Promise.all([
+      post('/api/session/', payload),
+      post('/api/session/', payload),
+    ]);
+    state.baselineId = baseline.scenario_id;
+    state.interventionId = intervention.scenario_id;
+    state.baseline = baseline;
+    state.intervention = intervention;
+    state.lastAction = null;
+    $('setupCard').style.display = 'none';
+    $('playback').style.display = 'block';
+    $('log').innerHTML = '';
+    setupCanvases();
+    renderAll();
+  } catch (err) {
+    alert('Ошибка создания: ' + err.message);
+  }
+}
+
+function setupCanvases() {
+  const cols = state.intervention.cols, rows = state.intervention.rows;
+  const cs = cellSize(cols);
+  for (const id of ['baselineCanvas', 'interventionCanvas']) {
+    const cv = $(id);
+    cv.width = cols * cs; cv.height = rows * cs;
+  }
+}
+
+function drawGrid(id, session, marker) {
+  const cv = $(id);
+  const ctx = cv.getContext('2d');
+  const cols = session.cols, rows = session.rows;
+  const cs = cv.width / cols;
+  const grid = session.frame.grid, iso = session.frame.isolation_mask;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      ctx.fillStyle = COLORS[grid[r][c]] || '#000';
+      ctx.fillRect(c * cs, r * cs, cs - 1, cs - 1);
+      if (iso && iso[r][c]) {
+        ctx.fillStyle = 'rgba(255,193,7,.4)';
+        ctx.fillRect(c * cs, r * cs, cs - 1, cs - 1);
+      }
+    }
+  }
+  if (marker) {
+    ctx.lineWidth = Math.max(1.5, cs * 0.12);
+    if (marker.type === 'remove_cell') {
+      const [r, c] = marker.coord;
+      ctx.strokeStyle = '#000';
+      ctx.beginPath();
+      ctx.moveTo(c * cs + 2, r * cs + 2);
+      ctx.lineTo((c + 1) * cs - 2, (r + 1) * cs - 2);
+      ctx.moveTo((c + 1) * cs - 2, r * cs + 2);
+      ctx.lineTo(c * cs + 2, (r + 1) * cs - 2);
+      ctx.stroke();
+    } else if (marker.type === 'isolate_zone') {
+      const [r, c] = marker.center;
+      ctx.strokeStyle = '#f9a825';
+      ctx.beginPath();
+      ctx.arc((c + 0.5) * cs, (r + 0.5) * cs, marker.radius * cs, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+}
+
+function renderMetrics(id, session) {
+  const m = session.frame.metrics;
+  const items = [
+    ['Здоровые', m.healthy], ['Заражены', m.infected], ['Выздоровели', m.recovered],
+    ['Удалены', m.removed], ['Изолировано', m.isolated], ['Расходы', m.cost],
+  ];
+  $(id).innerHTML = items.map(([l, v]) =>
+    '<div class="metric"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'
+  ).join('');
+}
+
+function renderCompare() {
+  const b = state.baseline.frame.metrics, i = state.intervention.frame.metrics;
+  const rows = [
+    ['Заражены', 'infected'], ['Здоровые', 'healthy'], ['Выздоровели', 'recovered'],
+    ['Удалены', 'removed'], ['Изолировано', 'isolated'], ['Расходы', 'cost'],
+  ];
+  let html = '<tr><th>Метрика</th><th>Без вмешательства</th><th>С вмешательствами</th><th>Δ</th></tr>';
+  for (const [label, key] of rows) {
+    const d = i[key] - b[key];
+    const cls = d > 0 ? 'delta-pos' : (d < 0 ? 'delta-neg' : '');
+    const sign = d > 0 ? '+' : '';
+    html += '<tr><td>' + label + '</td><td>' + b[key] + '</td><td>' + i[key] +
+      '</td><td class="' + cls + '">' + sign + d + '</td></tr>';
+  }
+  $('compareTable').innerHTML = html;
+}
+
+function renderAll() {
+  if (!state.intervention) return;
+  drawGrid('baselineCanvas', state.baseline);
+  drawGrid('interventionCanvas', state.intervention, state.lastAction);
+  renderMetrics('baselineMetrics', state.baseline);
+  renderMetrics('interventionMetrics', state.intervention);
+  renderCompare();
+  const s = state.intervention;
+  $('status').textContent = 'День ' + s.current_day + ' / ' + s.days + (s.finished ? ' — завершено' : '');
+}
+
+async function step() {
+  if (!state.intervention || state.intervention.finished) { stopPlay(); return; }
+  try {
+    const [b, i] = await Promise.all([
+      post('/api/session/' + state.baselineId + '/step', {}),
+      post('/api/session/' + state.interventionId + '/step', {}),
+    ]);
+    state.baseline = b; state.intervention = i; state.lastAction = null;
+    renderAll();
+    if (state.intervention.finished) stopPlay();
+  } catch (err) {
+    stopPlay();
+    alert('Ошибка шага: ' + err.message);
+  }
+}
+
+function togglePlay() {
+  if (state.playing) { stopPlay(); return; }
+  if (!state.intervention || state.intervention.finished) return;
+  state.playing = true;
+  $('playBtn').textContent = 'Пауза';
+  state.timer = setInterval(step, 450);
+  step();
+}
+
+function stopPlay() {
+  state.playing = false;
+  $('playBtn').textContent = 'Запустить';
+  if (state.timer) { clearInterval(state.timer); state.timer = null; }
+}
+
+async function reset() {
+  stopPlay();
+  if (state.baselineId) await fetch('/api/session/' + state.baselineId, { method: 'DELETE' }).catch(() => {});
+  if (state.interventionId) await fetch('/api/session/' + state.interventionId, { method: 'DELETE' }).catch(() => {});
+  state.baselineId = state.interventionId = null;
+  state.baseline = state.intervention = null;
+  $('playback').style.display = 'none';
+  $('setupCard').style.display = 'block';
+}
+
+$('interventionCanvas').addEventListener('click', async e => {
+  if (!state.intervention || state.intervention.finished) return;
+  const cv = e.target;
+  const rect = cv.getBoundingClientRect();
+  const cols = state.intervention.cols, rows = state.intervention.rows;
+  const cs = cv.width / cols;
+  const c = Math.floor((e.clientX - rect.left) / cs);
+  const r = Math.floor((e.clientY - rect.top) / cs);
+  if (r < 0 || r >= rows || c < 0 || c >= cols) return;
+
+  const mode = document.querySelector('input[name=mode]:checked').value;
+  const body = mode === 'remove'
+    ? { type: 'remove_cell', coord: [r, c], cost_per_plant: +$('costPlant').value }
+    : { type: 'isolate_zone', center: [r, c], radius: +$('radius').value, cost_per_cell: +$('costCell').value };
+
+  try {
+    state.intervention = await post('/api/session/' + state.interventionId + '/intervene', body);
+    state.lastAction = state.intervention.last_action;
+    addLog(state.intervention.applied_interventions[state.intervention.applied_interventions.length - 1]);
+    renderAll();
+  } catch (err) {
+    alert('Ошибка вмешательства: ' + err.message);
+  }
+});
+
+function addLog(a) {
+  if (!a) return;
+  let text;
+  if (a.type === 'remove_cell') {
+    text = 'День ' + a.day + ': удаление [' + a.coord + '] (до этого состояние ' + a.previous_state + ')' +
+      (a.applied ? '' : ' — уже удалено');
+  } else {
+    text = 'День ' + a.day + ': изоляция [' + a.center + '] r=' + a.radius +
+      ', новых клеток ' + a.newly_isolated + ', стоимость ' + a.cost;
+  }
+  const div = document.createElement('div');
+  div.textContent = text;
+  $('log').prepend(div);
+}
+
+$('rows').addEventListener('input', drawSetup);
+$('cols').addEventListener('input', drawSetup);
+$('randomSeed').addEventListener('click', () => { $('seed').value = Math.floor(Math.random() * 1000000); });
+$('createBtn').addEventListener('click', createSimulations);
+$('stepBtn').addEventListener('click', step);
+$('playBtn').addEventListener('click', togglePlay);
+$('resetBtn').addEventListener('click', reset);
+
+drawSetup();
+</script>
+</body>
+</html>

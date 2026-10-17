@@ -28,13 +28,17 @@ class DiseaseParams(BaseModel):
 
 
 class RemoveInfectedIntervention(BaseModel):
+    """Плановое удаление одной клетки в указанный день (batch/compare)."""
+
     type: Literal["remove_infected"]
-    day: int = Field(..., ge=1)
+    day: int = Field(..., ge=0)
     coord: Coord
     cost_per_plant: float = Field(..., ge=0)
 
 
 class IsolateZoneIntervention(BaseModel):
+    """Плановая изоляция круглой зоны в указанный день (batch/compare)."""
+
     type: Literal["isolate_zone"]
     day: int = Field(..., ge=0)
     center: Coord
@@ -49,13 +53,15 @@ Intervention = Annotated[
 
 
 class SimulateRequest(BaseModel):
-    rows: int = Field(..., ge=5, le=50)
-    cols: int = Field(..., ge=5, le=50)
-    initial_infected: list[Coord] = Field(..., min_length=1, max_length=5)
+    """Исходные данные эксперимента (общиe для batch-эндпоинтов и сессий)."""
+
+    rows: int = Field(..., ge=10, le=50)
+    cols: int = Field(..., ge=10, le=50)
+    initial_infected: list[Coord] = Field(..., min_length=1, max_length=3)
     days: int = Field(..., ge=1, le=100)
     seed: int
     disease: DiseaseParams
-    interventions: list[Intervention] = Field(default_factory=list, max_length=200)
+    interventions: list[Intervention] = Field(default_factory=list, max_length=100)
 
     @field_validator("initial_infected")
     @classmethod
@@ -90,12 +96,36 @@ class SimulateRequest(BaseModel):
         return self
 
 
-class AppliedRemoveInfected(BaseModel):
-    type: Literal["remove_infected"]
-    day: int
-    removed_count: int
+class RemoveCellAction(BaseModel):
+    """Живое вмешательство: удалить одну клетку (независимо от её состояния)."""
+
+    type: Literal["remove_cell"]
     coord: Coord
+    cost_per_plant: float = Field(10.0, ge=0)
+
+
+class IsolateZoneAction(BaseModel):
+    """Живое вмешательство: изолировать круглую зону (постоянно)."""
+
+    type: Literal["isolate_zone"]
+    center: Coord
+    radius: int = Field(2, ge=0)
+    cost_per_cell: float = Field(2.0, ge=0)
+
+
+LiveIntervention = Annotated[
+    RemoveCellAction | IsolateZoneAction,
+    Field(discriminator="type"),
+]
+
+
+class AppliedRemoveCell(BaseModel):
+    type: Literal["remove_cell"]
+    day: int
+    coord: Coord
+    previous_state: int = Field(description="Состояние клетки до удаления")
     cost: float
+    applied: bool = Field(description="False, если клетка уже была удалена (no-op)")
 
 
 class AppliedIsolateZone(BaseModel):
@@ -103,12 +133,13 @@ class AppliedIsolateZone(BaseModel):
     day: int
     center: Coord
     radius: int
-    zone_size: int
+    zone_size: int = Field(description="Число клеток в круге целиком")
+    newly_isolated: int = Field(description="Число клеток, изолированных впервые")
     cost: float
 
 
 AppliedIntervention = Annotated[
-    AppliedRemoveInfected | AppliedIsolateZone,
+    AppliedRemoveCell | AppliedIsolateZone,
     Field(discriminator="type"),
 ]
 
@@ -138,6 +169,23 @@ class Summary(BaseModel):
     loss: int
     peak_infected: int
     peak_day: int
+
+
+class SessionState(BaseModel):
+    """Текущее состояние live-сессии (текущий кадр + накопленная статистика)."""
+
+    scenario_id: str
+    seed: int
+    rows: int
+    cols: int
+    days: int
+    current_day: int
+    finished: bool
+    state_names: dict[str, str]
+    frame: Frame
+    applied_interventions: list[AppliedIntervention]
+    last_action: AppliedIntervention | None = None
+    summary: Summary
 
 
 class ComparisonEntry(BaseModel):
