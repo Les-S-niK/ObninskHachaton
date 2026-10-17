@@ -17,6 +17,14 @@ const ISOLATION_COLOR = "#8e24aa";
 const ISOLATION_HATCH = "rgba(142, 36, 170, 0.6)";
 const CELL_BORDER = "#d0d7de";
 
+// Ряды графика: [ключ метрики, подпись, цвет].
+const CHART_SERIES = [
+    ["healthy", "Здоровые", COLORS[HEALTHY]],
+    ["infected", "Заражены", COLORS[INFECTED]],
+    ["recovered", "Выздоровели", COLORS[RECOVERED]],
+    ["removed", "Удалены", COLORS[REMOVED]],
+];
+
 const MAX_CELLS = 3;
 const SETUP_MAX_PX = 450;
 
@@ -36,6 +44,8 @@ const state = {
     playing: false,
     timer: null,
     lastAction: null,
+    baselineHistory: [],
+    interventionHistory: [],
 };
 
 function cellSize(cols) {
@@ -92,9 +102,7 @@ function buildPayload() {
         cols: +$("cols").value,
         days: +$("days").value,
         seed: +$("seed").value,
-        initial_infected: [...state.initial].map((s) =>
-            s.split(",").map(Number),
-        ),
+        initial_infected: [...state.initial].map((s) => s.split(",").map(Number)),
         disease: {
             infection_prob: +$("infection_prob").value,
             recovery_prob: +$("recovery_prob").value,
@@ -107,7 +115,7 @@ function buildPayload() {
 async function post(url, body) {
     const resp = await fetch(url, {
         method: "POST",
-        headers: {"Content-Type": "application/json"},
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
     });
     if (!resp.ok) throw new Error("HTTP " + resp.status);
@@ -130,6 +138,8 @@ async function createSimulations() {
         state.baseline = baseline;
         state.intervention = intervention;
         state.lastAction = null;
+        state.baselineHistory = [];
+        state.interventionHistory = [];
         $("setupCard").style.display = "none";
         $("playback").style.display = "block";
         $("log").innerHTML = "";
@@ -274,13 +284,107 @@ function renderCompare() {
     $("compareTable").innerHTML = html;
 }
 
+// Запоминаем метрики текущего дня для графиков (перезаписываем день при
+// вмешательствах, которые не двигают счётчик дней).
+function recordHistory() {
+    if (!state.intervention || !state.baseline) return;
+    state.baselineHistory[state.baseline.frame.day] =
+        state.baseline.frame.metrics;
+    state.interventionHistory[state.intervention.frame.day] =
+        state.intervention.frame.metrics;
+}
+
+function drawChart(id, history, days) {
+    const cv = $(id);
+    if (!cv) return;
+    const W = 520,
+        H = 220;
+    cv.width = W;
+    cv.height = H;
+    const ctx = cv.getContext("2d");
+    ctx.fillStyle = "#888888";
+    ctx.fillRect(0, 0, W, H);
+
+    const padL = 42,
+        padR = 12,
+        padT = 12,
+        padB = 26;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+    const total = Math.max(1, days);
+
+    let maxY = 1;
+    for (const m of history) {
+        if (!m) continue;
+        maxY = Math.max(maxY, m.healthy, m.infected, m.recovered, m.removed);
+    }
+
+    const x = (day) => padL + (day / total) * plotW;
+    const y = (v) => padT + plotH - (v / maxY) * plotH;
+
+    ctx.font = "10px system-ui, -apple-system, sans-serif";
+    ctx.lineWidth = 1;
+
+    // Горизонтальная сетка и подписи оси Y.
+    const ticks = 4;
+    for (let i = 0; i <= ticks; i++) {
+        const v = Math.round((maxY / ticks) * i);
+        const yy = y(v);
+        ctx.strokeStyle = "rgba(255,255,255,0.3)";
+        ctx.beginPath();
+        ctx.moveTo(padL, yy);
+        ctx.lineTo(W - padR, yy);
+        ctx.stroke();
+        ctx.fillStyle = "#f4f6f8";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(v), padL - 6, yy);
+    }
+
+    // Подписи оси X (дни).
+    const xStep = Math.max(1, Math.ceil(total / 8));
+    ctx.fillStyle = "#f4f6f8";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    for (let d = 0; d <= total; d += xStep) {
+        ctx.fillText(String(d), x(d), H - padB + 6);
+    }
+
+    // Линии по типам растений.
+    for (const [key, , color] of CHART_SERIES) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        let started = false;
+        history.forEach((m, day) => {
+            if (!m) return;
+            const px = x(day),
+                py = y(m[key]);
+            if (!started) {
+                ctx.moveTo(px, py);
+                started = true;
+            } else {
+                ctx.lineTo(px, py);
+            }
+        });
+        ctx.stroke();
+    }
+}
+
 function renderAll() {
     if (!state.intervention) return;
+    recordHistory();
     drawGrid("baselineCanvas", state.baseline);
     drawGrid("interventionCanvas", state.intervention, state.lastAction);
     renderMetrics("baselineMetrics", state.baseline);
     renderMetrics("interventionMetrics", state.intervention);
     renderCompare();
+    drawChart("baselineChart", state.baselineHistory, state.intervention.days);
+    drawChart(
+        "interventionChart",
+        state.interventionHistory,
+        state.intervention.days,
+    );
     const s = state.intervention;
     $("status").textContent =
         "День " +
@@ -344,6 +448,8 @@ async function reset() {
         }).catch(() => { });
     state.baselineId = state.interventionId = null;
     state.baseline = state.intervention = null;
+    state.baselineHistory = [];
+    state.interventionHistory = [];
     $("playback").style.display = "none";
     $("setupCard").style.display = "block";
 }
