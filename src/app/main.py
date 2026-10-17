@@ -1,5 +1,6 @@
 from pathlib import Path
 
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -33,7 +34,7 @@ app.add_middleware(
     allow_headers=AppSettings.CORS.ALLOW_HEADERS,
 )
 
-STATIC_DIR = Path(__file__).resolve().parent / "static"
+STATIC_DIR = Path(__file__).resolve().parent / "../frontend"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
