@@ -97,7 +97,6 @@ class AppliedIsolateZone(BaseModel):
     center: Coord
     radius: int
     zone_size: int
-    removed_inside: int
     cost: float
 
 

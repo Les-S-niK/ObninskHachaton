@@ -262,7 +262,6 @@ def run_simulation(
                         "center": intervention["center"],
                         "radius": intervention["radius"],
                         "zone_size": zone_size,
-                        "removed_inside": 0,
                         "cost_per_cell": intervention["cost_per_cell"],
                         "cost": cost,
                     }
