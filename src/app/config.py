@@ -10,9 +10,9 @@ class AppSettings:
 
     class CORS:
         ALLOW_ORIGINS: ClassVar[list[str]] = [
-            "http://localhost.tiangolo.com",
-            "https://localhost.tiangolo.com",
             "http://localhost",
+            "http://127.0.0.1",
+            "http://0.0.0.0",
             "http://localhost:8080",
         ]
         ALLOW_CREDENTIALS: ClassVar[bool] = True
