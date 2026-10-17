@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Агроэпидемия · Симулятор теплицы</title>
   <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -66,7 +67,6 @@
 
         <!-- ДВЕ СЕТКИ РЯДОМ -->
         <section class="grids-row">
-          <!-- BASELINE -->
           <div class="panel grid-panel">
             <div class="panel-heading">
               <h2>Без вмешательства</h2>
@@ -83,7 +83,6 @@
             </div>
           </div>
 
-          <!-- INTERVENTION -->
           <div class="panel grid-panel">
             <div class="panel-heading">
               <h2>С вмешательством</h2>
@@ -104,11 +103,32 @@
         <!-- ТАЙМЛАЙН -->
         <section class="panel timeline">
           <div class="timeline-controls">
-            <button id="prevBtn" type="button" class="btn secondary small" disabled>Назад</button>
             <button id="stepBtn" type="button" class="btn secondary small" disabled>Шаг +1 день</button>
             <button id="playBtn" type="button" class="btn secondary small" disabled>Play</button>
             <span id="dayLabel" class="day-label">День 0</span>
             <button id="resetBtn" type="button" class="btn secondary small" disabled>Удалить сессию</button>
+          </div>
+        </section>
+
+        <!-- ГРАФИК + ЖУРНАЛ МЕР -->
+        <section class="chart-log-row">
+          <div class="panel chart-panel">
+            <div class="panel-heading">
+              <h2>Динамика заражений</h2>
+            </div>
+            <div class="chart-container">
+              <canvas id="diseaseChart"></canvas>
+            </div>
+          </div>
+
+          <div class="panel log-panel">
+            <div class="panel-heading">
+              <h2>Принятые меры</h2>
+              <span class="cost-badge" id="totalCost">0 ₽</span>
+            </div>
+            <div id="actionLog" class="action-log">
+              <p class="muted log-empty">Пока мер не принято.</p>
+            </div>
           </div>
         </section>
 

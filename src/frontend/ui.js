@@ -1,9 +1,7 @@
 (() => {
-  // =========================================================================
-  // МИНИ-БЭКЕНД (пока нет реального API)
-  // Если коллега запустит FastAPI — замените эти функции на fetch(...)
-  // =========================================================================
-
+  // ======================================================================
+  // ЛОКАЛЬНЫЙ БЭКЕНД (заменить на fetch, когда коллега поднимет FastAPI)
+  // ======================================================================
   const STATE = { HEALTHY: 0, RISK: 1, INFECTED: 2, RECOVERED: 3, REMOVED: 4 };
 
   function rng(seed) {
@@ -11,7 +9,6 @@
     return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
   }
 
-  // Один шаг симуляции для сценария (baseline или intervention)
   function stepScenario(sc) {
     const { rows, cols, disease, rand, grid, isolationMask } = sc;
     const newGrid = grid.map(r => [...r]);
@@ -28,10 +25,7 @@
           const nbs = [[r-1,c],[r+1,c],[r,c-1],[r,c+1]];
           let hasInfected = false;
           for (const [nr, nc] of nbs) {
-            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && grid[nr][nc] === STATE.INFECTED) {
-              hasInfected = true;
-              break;
-            }
+            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && grid[nr][nc] === STATE.INFECTED) { hasInfected = true; break; }
           }
           if (hasInfected) {
             if (s === STATE.HEALTHY) {
@@ -48,7 +42,6 @@
     }
     sc.grid = newGrid;
     sc.day += 1;
-    return newGrid;
   }
 
   function calcMetrics(grid) {
@@ -63,22 +56,118 @@
     return { healthy, risk, infected, recovered, removed };
   }
 
-  // =========================================================================
+  // ======================================================================
   // СОСТОЯНИЕ ФРОНТЕНДА
-  // =========================================================================
+  // ======================================================================
   const $ = (id) => document.getElementById(id);
   const COLORS = ["healthy", "risk", "infected", "recovered", "removed"];
 
-  let baseline = null;      // объект-сценарий
-  let intervention = null;  // объект-сценарий
+  let baseline = null;
+  let intervention = null;
   let playing = false;
   let timer = null;
   let currentTool = 'seed';
-  let pendingSeeds = [];    // очаги, выбранные до создания сессии
+  let pendingSeeds = [];
+  let chart = null;
+  let log = []; // журнал принятых мер: {day, type, coords, cost}
 
-  // =========================================================================
+  // ======================================================================
+  // ГРАФИК
+  // ======================================================================
+  function initChart() {
+    const ctx = $('diseaseChart').getContext('2d');
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Заражено (базовая)',
+            borderColor: '#e05252',
+            backgroundColor: 'rgba(224,82,82,0.1)',
+            data: [],
+            tension: 0.25,
+            borderWidth: 2,
+            pointRadius: 0,
+            borderDash: [6, 4],
+          },
+          {
+            label: 'Заражено (с мерами)',
+            borderColor: '#ff8888',
+            backgroundColor: 'rgba(255,136,136,0.15)',
+            data: [],
+            tension: 0.25,
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: true,
+          },
+          {
+            label: 'Здоровые (с мерами)',
+            borderColor: '#4f8a5b',
+            backgroundColor: 'transparent',
+            data: [],
+            tension: 0.25,
+            borderWidth: 2,
+            pointRadius: 0,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 200 },
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: '#9aada2', boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 11 } }
+          },
+          tooltip: { backgroundColor: '#121b19', borderColor: '#293a34', borderWidth: 1, titleColor: '#e7f0e9', bodyColor: '#9aada2' }
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(41,58,52,0.5)' },
+            ticks: { color: '#9aada2', font: { size: 10 } }
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(41,58,52,0.5)' },
+            ticks: { color: '#9aada2', font: { size: 10 } }
+          }
+        }
+      }
+    });
+  }
+
+  function updateChart() {
+    if (!chart || !baseline || !intervention) return;
+    // Пересчитываем все точки от 0 до текущего дня
+    // Для этого нужен массив истории. Проще — поддерживать history.
+    // Здесь — пересчёт по истории шагов.
+    const bHist = baseline.history || [];
+    const iHist = intervention.history || [];
+
+    const labels = [];
+    const bInf = [];
+    const iInf = [];
+    const iHealthy = [];
+
+    for (let i = 0; i < iHist.length; i++) {
+      labels.push(`Д${i}`);
+      bInf.push(bHist[i] ? bHist[i].infected : 0);
+      iInf.push(iHist[i].infected);
+      iHealthy.push(iHist[i].healthy);
+    }
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = bInf;
+    chart.data.datasets[1].data = iInf;
+    chart.data.datasets[2].data = iHealthy;
+    chart.update();
+  }
+
+  // ======================================================================
   // РЕНДЕР
-  // =========================================================================
+  // ======================================================================
   function renderGridInto(el, sc) {
     const { rows, cols, grid, isolationMask } = sc;
     el.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
@@ -90,8 +179,6 @@
         btn.type = 'button';
         btn.className = `cell ${COLORS[grid[r][c]]}`;
         if (isolationMask[r][c]) btn.classList.add('isolated');
-        btn.dataset.r = r;
-        btn.dataset.c = c;
         btn.addEventListener('click', () => onCellClick(sc, r, c));
         frag.appendChild(btn);
       }
@@ -123,33 +210,64 @@
     renderGridInto($('gridBaseline'), baseline);
     renderGridInto($('gridIntervention'), intervention);
     updateMetricsUI();
+    updateChart();
+    renderLog();
   }
 
-  // =========================================================================
-  // КЛИК ПО КЛЕТКЕ (живое вмешательство)
-  // =========================================================================
+  // ======================================================================
+  // ЖУРНАЛ МЕР
+  // ======================================================================
+  function renderLog() {
+    const el = $('actionLog');
+    if (!log.length) {
+      el.innerHTML = '<p class="muted log-empty">Пока мер не принято.</p>';
+    } else {
+      el.innerHTML = '';
+      // Показываем в обратном порядке (последние сверху)
+      [...log].reverse().forEach(a => {
+        const div = document.createElement('div');
+        div.className = 'log-item';
+        div.innerHTML = `<span class="log-desc">${a.desc}</span><span class="log-cost">${a.cost} ₽</span>`;
+        el.appendChild(div);
+      });
+    }
+    const total = log.reduce((s, a) => s + a.cost, 0);
+    $('totalCost').textContent = `${total} ₽`;
+  }
+
+  function addLog(desc, cost) {
+    log.push({ day: intervention ? intervention.day : 0, desc, cost });
+    renderLog();
+  }
+
+  // ======================================================================
+  // ВМЕШАТЕЛЬСТВА
+  // ======================================================================
   function onCellClick(sc, r, c) {
-    // Если это ещё не сессия, а первичный выбор очагов
     if (!baseline) {
       if (currentTool !== 'seed') return;
-      const key = `${r},${c}`;
-      const i = pendingSeeds.findIndex(([sr, sc2]) => sr === r && sc2 === c);
+      const i = pendingSeeds.findIndex(([sr, scc]) => sr === r && scc === c);
       if (i >= 0) pendingSeeds.splice(i, 1);
       else pendingSeeds.push([r, c]);
       renderPreview();
       return;
     }
 
-    // Живое вмешательство
+    // Вмешательство — только в сценарии intervention
+    if (sc === baseline) {
+      // Клик по baseline ничего не делает (это контрольный сценарий)
+      return;
+    }
+
     if (currentTool === 'remove') {
+      if (sc.grid[r][c] === STATE.REMOVED) return; // no-op
       const cost = Number($('costRemove').value) || 0;
-      if (sc.grid[r][c] === STATE.REMOVED) return;
       sc.grid[r][c] = STATE.REMOVED;
-      sc.cost += cost;
+      addLog(`Удалено (${r}, ${c})`, cost);
       renderAll();
     } else if (currentTool === 'isolate') {
       const rad = Number($('isolateRadius').value) || 0;
-      const cost = Number($('costIsolate').value) || 0;
+      const cellCost = Number($('costIsolate').value) || 0;
       let newCells = 0;
       for (let dr = -rad; dr <= rad; dr++) {
         for (let dc = -rad; dc <= rad; dc++) {
@@ -161,14 +279,16 @@
           newCells++;
         }
       }
-      sc.cost += newCells * cost;
+      if (newCells === 0) return;
+      const total = newCells * cellCost;
+      addLog(`Изоляция (${r}, ${c}), радиус ${rad} — ${newCells} кл.`, total);
       renderAll();
     }
   }
 
-  // =========================================================================
-  // ПРЕВЬЮ СЕТКИ (до создания сессии)
-  // =========================================================================
+  // ======================================================================
+  // ПРЕВЬЮ (до создания сессии)
+  // ======================================================================
   function renderPreview() {
     const R = Number($('rows').value) || 10;
     const C = Number($('cols').value) || 10;
@@ -187,9 +307,9 @@
     $('dayLabel').textContent = 'День 0';
   }
 
-  // =========================================================================
+  // ======================================================================
   // СОЗДАНИЕ СЕССИИ
-  // =========================================================================
+  // ======================================================================
   function createSession() {
     const R = Number($('rows').value);
     const C = Number($('cols').value);
@@ -198,31 +318,29 @@
     const rec = Number($('recoveryProb').value);
     const rem = Number($('removalProb').value);
 
-    if (!pendingSeeds.length) {
-      showStatus('Сначала отметьте хотя бы один очаг.', true);
-      return;
-    }
+    if (!pendingSeeds.length) { showStatus('Сначала отметьте хотя бы один очаг.', true); return; }
 
     const disease = { infection_prob: inf, recovery_prob: rec, removal_prob: rem };
 
     const mk = () => {
       const g = Array.from({length: R}, () => Array(C).fill(0));
       for (const [r, c] of pendingSeeds) g[r][c] = STATE.INFECTED;
+      const m0 = calcMetrics(g);
       return {
         rows: R, cols: C, day: 0,
         disease,
-        rand: rng(seed),  // одинаковый seed — одинаковый поток случайности
+        rand: rng(seed),
         grid: g,
         isolationMask: Array.from({length: R}, () => Array(C).fill(0)),
-        cost: 0,
+        history: [m0],
       };
     };
 
     baseline = mk();
     intervention = mk();
+    log = [];
 
-    // Разблокируем управление
-    $('prevBtn').disabled = false;
+    // Разблокировки
     $('stepBtn').disabled = false;
     $('playBtn').disabled = false;
     $('resetBtn').disabled = false;
@@ -231,20 +349,24 @@
     $('startBtn').disabled = true;
     document.querySelectorAll('#rows, #cols, #seed').forEach(el => el.disabled = true);
 
+    // Сброс графика
+    chart.data.labels = [];
+    chart.data.datasets.forEach(ds => ds.data = []);
+    chart.update();
+
     renderAll();
-    showStatus('Сессия создана. Вмешивайтесь кликом по клеткам.');
+    showStatus('Сессия создана. Вмешивайтесь кликом по правой сетке.');
   }
 
-  // =========================================================================
+  // ======================================================================
   // ШАГ
-  // =========================================================================
+  // ======================================================================
   function stepOne() {
     if (!baseline) return;
-    // ВАЖНО: интервенция должна получить те же случайные числа, что и baseline.
-    // Поэтому делаем шаг в baseline, потом в intervention — rand у них независимый,
-    // но инициализирован одним seed. Это гарантирует идентичный поток случайности.
     stepScenario(baseline);
     stepScenario(intervention);
+    baseline.history.push(calcMetrics(baseline.grid));
+    intervention.history.push(calcMetrics(intervention.grid));
     renderAll();
   }
 
@@ -252,9 +374,7 @@
     if (playing) return stopPlay();
     playing = true;
     $('playBtn').textContent = 'Пауза';
-    timer = setInterval(() => {
-      stepOne();
-    }, 500);
+    timer = setInterval(stepOne, 500);
   }
   function stopPlay() {
     playing = false;
@@ -267,26 +387,40 @@
     baseline = null;
     intervention = null;
     pendingSeeds = [];
+    log = [];
     $('startBtn').disabled = false;
-    $('prevBtn').disabled = true;
     $('stepBtn').disabled = true;
     $('playBtn').disabled = true;
     $('resetBtn').disabled = true;
     document.querySelectorAll('.tool-btn').forEach(b => b.disabled = b.dataset.tool !== 'seed');
+    document.querySelector('[data-tool="seed"]').classList.add('active');
+    document.querySelectorAll('.tool-btn').forEach(b => { if (b.dataset.tool !== 'seed') b.classList.remove('active'); });
+    currentTool = 'seed';
     $('isolateRadius').disabled = true;
     document.querySelectorAll('#rows, #cols, #seed').forEach(el => el.disabled = false);
+
+    if (chart) {
+      chart.data.labels = [];
+      chart.data.datasets.forEach(ds => ds.data = []);
+      chart.update();
+    }
+
     renderPreview();
+    renderLog();
     showStatus('Сессия удалена.');
   }
 
-  // =========================================================================
-  // UI-СОБЫТИЯ
-  // =========================================================================
+  // ======================================================================
+  // УТИЛИТЫ
+  // ======================================================================
   function showStatus(msg, err = false) {
     $('status').textContent = msg;
     $('status').classList.toggle('error', err);
   }
 
+  // ======================================================================
+  // СОБЫТИЯ
+  // ======================================================================
   document.querySelectorAll('.tool-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (btn.disabled) return;
@@ -304,8 +438,9 @@
   $('stepBtn').addEventListener('click', stepOne);
   $('playBtn').addEventListener('click', startPlay);
 
-  // =========================================================================
+  // ======================================================================
   // СТАРТ
-  // =========================================================================
+  // ======================================================================
+  initChart();
   renderPreview();
 })();
