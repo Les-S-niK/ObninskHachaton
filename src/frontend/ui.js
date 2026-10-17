@@ -1,459 +1,311 @@
 (() => {
-  const $ = (id) => document.getElementById(id);
-  
-  // Состояния: 0-обычное, 1-риск, 2-зараженное, 3-выздоровело, 4-выкопали
-  const COLORS = ["healthy", "risk", "infected", "recovered", "removed"];
-  
-  let seeds = [];
-  let manualActions = []; // { r, c, type: 'remove' | 'isolate', radius, cost }
-  let editing = true;
-  let result = null;
-  let currentScenario = 'intervention';
-  let currentDay = 0;
-  let playTimer = null;
-  let menuCell = null;
+  // =========================================================================
+  // МИНИ-БЭКЕНД (пока нет реального API)
+  // Если коллега запустит FastAPI — замените эти функции на fetch(...)
+  // =========================================================================
 
-  const rows = () => Number($("rows").value);
-  const cols = () => Number($("cols").value);
-  const totalDays = () => Number($("days").value);
-  const costRemove = () => Number($("costRemove").value) || 0;
-  const costIsolate = () => Number($("costIsolate").value) || 0;
+  const STATE = { HEALTHY: 0, RISK: 1, INFECTED: 2, RECOVERED: 3, REMOVED: 4 };
 
-  // Инициализация
-  function init() {
-    renderGrid();
-    setupEvents();
+  function rng(seed) {
+    let s = seed >>> 0;
+    return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
   }
 
-  function setupEvents() {
-    $("runBtn").closest("form").addEventListener("submit", runSimulation);
-    
-    $("editSeeds").addEventListener("click", () => {
-      editing = !editing;
-      $("editSeeds").textContent = editing ? "Завершить выбор очагов" : "Режим очагов";
-      $("editSeeds").classList.toggle("active", editing);
-      resetTimeline();
-      renderGrid();
-    });
+  // Один шаг симуляции для сценария (baseline или intervention)
+  function stepScenario(sc) {
+    const { rows, cols, disease, rand, grid, isolationMask } = sc;
+    const newGrid = grid.map(r => [...r]);
 
-    $("showBaseline").addEventListener("click", () => switchScenario('baseline'));
-    $("showIntervention").addEventListener("click", () => switchScenario('intervention'));
-    
-    $("prevBtn").addEventListener("click", () => setDay(currentDay - 1));
-    $("nextBtn").addEventListener("click", () => setDay(currentDay + 1));
-    $("daySlider").addEventListener("input", (e) => setDay(e.target.value));
-    
-    $("playBtn").addEventListener("click", togglePlay);
-    
-    // Меню
-    $("menuRadius").addEventListener("input", updateMenuCost);
-    $("costRemove").addEventListener("input", updateMenuCost);
-    $("costIsolate").addEventListener("input", updateMenuCost);
-    
-    $("menuRemove").addEventListener("click", () => { if(menuCell) applyAction(menuCell.r, menuCell.c, 'remove'); });
-    $("menuIsolate").addEventListener("click", () => { if(menuCell) applyAction(menuCell.r, menuCell.c, 'isolate', Number($("menuRadius").value)); });
-    $("menuCancel").addEventListener("click", closeMenu);
-    
-    document.addEventListener("click", (e) => {
-      if (!$("cellMenu").classList.contains("hidden") && 
-          !$("cellMenu").contains(e.target) && 
-          !e.target.classList.contains("cell")) {
-        closeMenu();
-      }
-    });
-  }
-
-  // --- Рендер ---
-  function renderGrid(customData, customMask) {
-    const gridEl = $("grid");
-    const R = rows();
-    const C = cols();
-    
-    gridEl.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
-    
-    let gData = customData;
-    let gMask = customMask;
-    
-    // Если нет данных симуляции — рисуем начальное состояние
-    if (!gData) {
-      gData = Array.from({ length: R }, () => Array(C).fill(0));
-      gMask = Array.from({ length: R }, () => Array(C).fill(0));
-      
-      // Очаги
-      for (const [r, c] of seeds) {
-        if (gData[r] && gData[r][c] !== undefined) gData[r][c] = 2;
-      }
-      
-      // Ручные меры
-      for (const a of manualActions) {
-        if (a.type === 'remove' && gData[a.r]?.[a.c] !== undefined) {
-          gData[a.r][a.c] = 4;
-        } else if (a.type === 'isolate') {
-          for (let dr = -a.radius; dr <= a.radius; dr++) {
-            for (let dc = -a.radius; dc <= a.radius; dc++) {
-              if (dr*dr + dc*dc <= a.radius*a.radius) {
-                const rr = a.r + dr, cc = a.c + dc;
-                if (gMask[rr] && gMask[rr][cc] !== undefined) gMask[rr][cc] = 1;
-              }
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const s = grid[r][c];
+        if (s === STATE.INFECTED) {
+          const roll = rand();
+          if (roll < disease.recovery_prob) newGrid[r][c] = STATE.RECOVERED;
+          else if (roll < disease.recovery_prob + disease.removal_prob) newGrid[r][c] = STATE.REMOVED;
+        } else if (s === STATE.HEALTHY || s === STATE.RISK) {
+          if (isolationMask[r][c]) continue;
+          const nbs = [[r-1,c],[r+1,c],[r,c-1],[r,c+1]];
+          let hasInfected = false;
+          for (const [nr, nc] of nbs) {
+            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && grid[nr][nc] === STATE.INFECTED) {
+              hasInfected = true;
+              break;
             }
+          }
+          if (hasInfected) {
+            if (s === STATE.HEALTHY) {
+              if (rand() < disease.infection_prob) newGrid[r][c] = STATE.INFECTED;
+              else newGrid[r][c] = STATE.RISK;
+            } else if (s === STATE.RISK) {
+              if (rand() < disease.infection_prob * 1.5) newGrid[r][c] = STATE.INFECTED;
+            }
+          } else if (s === STATE.RISK) {
+            newGrid[r][c] = STATE.HEALTHY;
           }
         }
       }
     }
+    sc.grid = newGrid;
+    sc.day += 1;
+    return newGrid;
+  }
 
-    const seedSet = new Set(seeds.map(([r,c]) => `${r},${c}`));
+  function calcMetrics(grid) {
+    let healthy = 0, risk = 0, infected = 0, recovered = 0, removed = 0;
+    for (const row of grid) for (const s of row) {
+      if (s === STATE.HEALTHY) healthy++;
+      else if (s === STATE.RISK) risk++;
+      else if (s === STATE.INFECTED) infected++;
+      else if (s === STATE.RECOVERED) recovered++;
+      else if (s === STATE.REMOVED) removed++;
+    }
+    return { healthy, risk, infected, recovered, removed };
+  }
+
+  // =========================================================================
+  // СОСТОЯНИЕ ФРОНТЕНДА
+  // =========================================================================
+  const $ = (id) => document.getElementById(id);
+  const COLORS = ["healthy", "risk", "infected", "recovered", "removed"];
+
+  let baseline = null;      // объект-сценарий
+  let intervention = null;  // объект-сценарий
+  let playing = false;
+  let timer = null;
+  let currentTool = 'seed';
+  let pendingSeeds = [];    // очаги, выбранные до создания сессии
+
+  // =========================================================================
+  // РЕНДЕР
+  // =========================================================================
+  function renderGridInto(el, sc) {
+    const { rows, cols, grid, isolationMask } = sc;
+    el.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    el.innerHTML = '';
     const frag = document.createDocumentFragment();
-    
-    for (let r = 0; r < R; r++) {
-      for (let c = 0; c < C; c++) {
-        const state = gData[r][c];
-        const isIso = gMask[r][c] === 1;
-        const isSel = editing && seedSet.has(`${r},${c}`);
-        
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = `cell ${COLORS[state]}`;
-        if (isIso) btn.classList.add("isolated");
-        if (isSel) btn.classList.add("selected");
-        
-        btn.disabled = editing ? false : true;
-        
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          if (editing) {
-            toggleSeed(r, c);
-          } else {
-            openMenu(r, c, e);
-          }
-        });
-        
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `cell ${COLORS[grid[r][c]]}`;
+        if (isolationMask[r][c]) btn.classList.add('isolated');
+        btn.dataset.r = r;
+        btn.dataset.c = c;
+        btn.addEventListener('click', () => onCellClick(sc, r, c));
         frag.appendChild(btn);
       }
     }
-    
-    gridEl.replaceChildren(frag);
-    updateMetricsFromCurrentState(gData, gMask);
+    el.appendChild(frag);
   }
 
-  function updateMetricsFromCurrentState(gData, gMask) {
-    let h=0, r=0, inf=0, rec=0, rem=0;
-    for(let i=0; i<rows(); i++){
-      for(let j=0; j<cols(); j++){
-        const s = gData[i][j];
-        if(s===0) h++;
-        else if(s===1) r++;
-        else if(s===2) inf++;
-        else if(s===3) rec++;
-        else if(s===4) rem++;
-      }
+  function updateMetricsUI() {
+    if (!baseline) return;
+    const b = calcMetrics(baseline.grid);
+    $('bHealthy').textContent = b.healthy;
+    $('bInfected').textContent = b.infected;
+    $('bRecovered').textContent = b.recovered;
+    $('bRemoved').textContent = b.removed;
+    $('baselineDay').textContent = `День ${baseline.day}`;
+
+    const i = calcMetrics(intervention.grid);
+    $('iHealthy').textContent = i.healthy;
+    $('iInfected').textContent = i.infected;
+    $('iRecovered').textContent = i.recovered;
+    $('iRemoved').textContent = i.removed;
+    $('interventionDay').textContent = `День ${intervention.day}`;
+
+    $('dayLabel').textContent = `День ${intervention.day}`;
+  }
+
+  function renderAll() {
+    if (!baseline) return;
+    renderGridInto($('gridBaseline'), baseline);
+    renderGridInto($('gridIntervention'), intervention);
+    updateMetricsUI();
+  }
+
+  // =========================================================================
+  // КЛИК ПО КЛЕТКЕ (живое вмешательство)
+  // =========================================================================
+  function onCellClick(sc, r, c) {
+    // Если это ещё не сессия, а первичный выбор очагов
+    if (!baseline) {
+      if (currentTool !== 'seed') return;
+      const key = `${r},${c}`;
+      const i = pendingSeeds.findIndex(([sr, sc2]) => sr === r && sc2 === c);
+      if (i >= 0) pendingSeeds.splice(i, 1);
+      else pendingSeeds.push([r, c]);
+      renderPreview();
+      return;
     }
-    $("mHealthy").textContent = h;
-    $("mRisk").textContent = r;
-    $("mInfected").textContent = inf;
-    $("mRecovered").textContent = rec;
-    $("mRemoved").textContent = rem;
-    
-    let cost = 0;
-    if (result) {
-      const sc = currentScenario === 'baseline' ? result.baseline : result.intervention;
-      const frame = sc.frames[Math.min(currentDay, sc.days)];
-      cost = frame.metrics.cost;
-    } else {
-      // Считаем предварительную стоимость ручных мер
-      cost = manualActions.reduce((sum, a) => sum + a.cost, 0);
-    }
-    $("mCost").textContent = cost;
-  }
 
-  // --- Логика работы с клетками ---
-  function toggleSeed(r, c) {
-    const idx = seeds.findIndex(([sr, sc]) => sr === r && sc === c);
-    if (idx >= 0) {
-      seeds.splice(idx, 1);
-    } else {
-      if (seeds.length >= 3) {
-        showStatus("Максимум 3 очага.", true);
-        return;
-      }
-      seeds.push([r, c]);
-    }
-    // Удаляем меру с этой клетки, если была
-    manualActions = manualActions.filter(a => !(a.r === r && a.c === c));
-    resetTimeline();
-    renderGrid();
-  }
-
-  function openMenu(r, c, event) {
-    menuCell = { r, c };
-    $("menuCoord").textContent = `(${r}, ${c})`;
-    $("menuRadius").value = 1;
-    updateMenuCost();
-    
-    const menu = $("cellMenu");
-    menu.classList.remove("hidden");
-    
-    const x = Math.min(event.clientX, window.innerWidth - 240);
-    const y = Math.min(event.clientY, window.innerHeight - 300);
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
-  }
-
-  function closeMenu() {
-    $("cellMenu").classList.add("hidden");
-    menuCell = null;
-  }
-
-  function updateMenuCost() {
-    const rad = Number($("menuRadius").value) || 0;
-    let count = 0;
-    for (let dr = -rad; dr <= rad; dr++) {
-      for (let dc = -rad; dc <= rad; dc++) {
-        if (dr*dr + dc*dc <= rad*rad) count++;
-      }
-    }
-    $("menuRemoveCost").textContent = costRemove();
-    $("menuIsolateCost").textContent = count * costIsolate();
-  }
-
-  function applyAction(r, c, type, radius = 0) {
-    // Удаляем старые действия на этой клетке
-    manualActions = manualActions.filter(a => !(a.r === r && a.c === c));
-    // Удаляем очаг, если клетку трогаем
-    seeds = seeds.filter(([sr, sc]) => !(sr === r && sc === c));
-    
-    if (type === 'remove') {
-      manualActions.push({ r, c, type, cost: costRemove() });
-    } else {
-      let count = 0;
-      for (let dr = -radius; dr <= radius; dr++) {
-        for (let dc = -radius; dc <= radius; dc++) {
-          if (dr*dr + dc*dc <= radius*radius) count++;
+    // Живое вмешательство
+    if (currentTool === 'remove') {
+      const cost = Number($('costRemove').value) || 0;
+      if (sc.grid[r][c] === STATE.REMOVED) return;
+      sc.grid[r][c] = STATE.REMOVED;
+      sc.cost += cost;
+      renderAll();
+    } else if (currentTool === 'isolate') {
+      const rad = Number($('isolateRadius').value) || 0;
+      const cost = Number($('costIsolate').value) || 0;
+      let newCells = 0;
+      for (let dr = -rad; dr <= rad; dr++) {
+        for (let dc = -rad; dc <= rad; dc++) {
+          if (dr*dr + dc*dc > rad*rad) continue;
+          const rr = r + dr, cc = c + dc;
+          if (rr < 0 || rr >= sc.rows || cc < 0 || cc >= sc.cols) continue;
+          if (sc.isolationMask[rr][cc]) continue;
+          sc.isolationMask[rr][cc] = 1;
+          newCells++;
         }
       }
-      manualActions.push({ r, c, type, radius, cost: count * costIsolate() });
+      sc.cost += newCells * cost;
+      renderAll();
     }
-    
-    closeMenu();
-    resetTimeline();
-    renderGrid();
   }
 
-  // --- Симуляция ---
-  function rng(seed) {
-    let s = seed >>> 0;
-    return () => {
-      s = (s * 1664525 + 1013904223) >>> 0;
-      return s / 4294967296;
+  // =========================================================================
+  // ПРЕВЬЮ СЕТКИ (до создания сессии)
+  // =========================================================================
+  function renderPreview() {
+    const R = Number($('rows').value) || 10;
+    const C = Number($('cols').value) || 10;
+
+    const empty = {
+      rows: R, cols: C,
+      grid: Array.from({length: R}, () => Array(C).fill(0)),
+      isolationMask: Array.from({length: R}, () => Array(C).fill(0)),
     };
+    for (const [r, c] of pendingSeeds) empty.grid[r][c] = STATE.INFECTED;
+
+    renderGridInto($('gridBaseline'), empty);
+    renderGridInto($('gridIntervention'), empty);
+    $('baselineDay').textContent = 'День 0';
+    $('interventionDay').textContent = 'День 0';
+    $('dayLabel').textContent = 'День 0';
   }
 
-  function runSimulation(e) {
-    e.preventDefault();
-    resetPlayback();
-    
-    try {
-      const R = rows(), C = cols(), D = totalDays();
-      const seed = Number($("seed").value);
-      const inf = Number($("infectionProb").value);
-      const rec = Number($("recoveryProb").value);
-      const rem = Number($("removalProb").value);
-      
-      if (seeds.length === 0 && manualActions.length === 0) {
-        throw new Error("Выберите хотя бы один очаг или примените меру.");
-      }
-      
-      $("status").textContent = "Расчет...";
-      
-      const params = { rows: R, cols: C, days: D, seed, initial: seeds, disease: { infection_prob: inf, recovery_prob: rec, removal_prob: rem } };
-      
-      // Базовый сценарий (без мер)
-      const baseline = simulate(params, []);
-      // С вмешательством (ручные меры)
-      const intervention = simulate(params, manualActions);
-      
-      result = { baseline, intervention };
-      
-      // Активируем таймлайн
-      $("showBaseline").disabled = false;
-      $("showIntervention").disabled = false;
-      $("prevBtn").disabled = false;
-      $("nextBtn").disabled = false;
-      $("playBtn").disabled = false;
-      $("daySlider").disabled = false;
-      $("daySlider").max = D;
-      
-      switchScenario('intervention');
-      setDay(0);
-      showStatus(`Seed: ${seed}. Готово.`);
-      
-    } catch (err) {
-      showStatus(err.message, true);
-    }
-  }
+  // =========================================================================
+  // СОЗДАНИЕ СЕССИИ
+  // =========================================================================
+  function createSession() {
+    const R = Number($('rows').value);
+    const C = Number($('cols').value);
+    const seed = Number($('seed').value);
+    const inf = Number($('infectionProb').value);
+    const rec = Number($('recoveryProb').value);
+    const rem = Number($('removalProb').value);
 
-  function simulate(params, actions) {
-    const { rows, cols, days, seed, initial, disease } = params;
-    const rand = rng(seed);
-    
-    let grid = Array.from({ length: rows }, () => Array(cols).fill(0));
-    let mask = Array.from({ length: rows }, () => Array(cols).fill(0));
-    
-    for (const [r, c] of initial) {
-      if (grid[r] && grid[r][c] !== undefined) grid[r][c] = 2;
-    }
-    
-    const frames = [];
-    let totalCost = 0;
-    
-    // Применяем ручные меры в 0-й день
-    for (const a of actions) {
-      totalCost += a.cost;
-      if (a.type === 'remove') {
-        if (grid[a.r]?.[a.c] !== undefined) grid[a.r][a.c] = 4;
-      } else if (a.type === 'isolate') {
-        for (let dr = -a.radius; dr <= a.radius; dr++) {
-          for (let dc = -a.radius; dc <= a.radius; dc++) {
-            if (dr*dr + dc*dc <= a.radius*a.radius) {
-              const r = a.r + dr, c = a.c + dc;
-              if (mask[r] && mask[r][c] !== undefined) mask[r][c] = 1;
-            }
-          }
-        }
-      }
+    if (!pendingSeeds.length) {
+      showStatus('Сначала отметьте хотя бы один очаг.', true);
+      return;
     }
 
-    frames.push({ grid: grid.map(r=>[...r]), isolation_mask: mask.map(r=>[...r]), metrics: calcMetrics(grid, mask, totalCost) });
+    const disease = { infection_prob: inf, recovery_prob: rec, removal_prob: rem };
 
-    for (let d = 1; d <= days; d++) {
-      const nextGrid = grid.map(r => [...r]);
-      
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const state = grid[r][c];
-          
-          if (state === 2) {
-            // Зараженное: шанс выздороветь или умереть
-            const roll = rand();
-            if (roll < disease.recovery_prob) nextGrid[r][c] = 3;
-            else if (roll < disease.recovery_prob + disease.removal_prob) nextGrid[r][c] = 4;
-            
-          } else if (state === 0 || state === 1) {
-            // Обычное или риск
-            if (mask[r][c]) continue;
-            
-            const isInfNeighbor = 
-              (grid[r-1]?.[c] === 2) || (grid[r+1]?.[c] === 2) || 
-              (grid[r]?.[c-1] === 2) || (grid[r]?.[c+1] === 2);
-              
-            if (isInfNeighbor) {
-              if (state === 0) {
-                if (rand() < disease.infection_prob) nextGrid[r][c] = 2;
-                else nextGrid[r][c] = 1;
-              } else {
-                if (rand() < disease.infection_prob * 1.5) nextGrid[r][c] = 2;
-              }
-            } else if (state === 1) {
-              nextGrid[r][c] = 0;
-            }
-          }
-        }
-      }
-      
-      grid = nextGrid;
-      frames.push({ grid: grid.map(r=>[...r]), isolation_mask: mask.map(r=>[...r]), metrics: calcMetrics(grid, mask, totalCost) });
-    }
-    
-    return { frames, days };
+    const mk = () => {
+      const g = Array.from({length: R}, () => Array(C).fill(0));
+      for (const [r, c] of pendingSeeds) g[r][c] = STATE.INFECTED;
+      return {
+        rows: R, cols: C, day: 0,
+        disease,
+        rand: rng(seed),  // одинаковый seed — одинаковый поток случайности
+        grid: g,
+        isolationMask: Array.from({length: R}, () => Array(C).fill(0)),
+        cost: 0,
+      };
+    };
+
+    baseline = mk();
+    intervention = mk();
+
+    // Разблокируем управление
+    $('prevBtn').disabled = false;
+    $('stepBtn').disabled = false;
+    $('playBtn').disabled = false;
+    $('resetBtn').disabled = false;
+    document.querySelectorAll('.tool-btn').forEach(b => b.disabled = false);
+    $('isolateRadius').disabled = false;
+    $('startBtn').disabled = true;
+    document.querySelectorAll('#rows, #cols, #seed').forEach(el => el.disabled = true);
+
+    renderAll();
+    showStatus('Сессия создана. Вмешивайтесь кликом по клеткам.');
   }
 
-  function calcMetrics(grid, mask, cost) {
-    let healthy = 0, risk = 0, infected = 0, recovered = 0, removed = 0;
-    for (let r = 0; r < grid.length; r++) {
-      for (let c = 0; c < grid[r].length; c++) {
-        const s = grid[r][c];
-        if (s === 0) healthy++;
-        else if (s === 1) risk++;
-        else if (s === 2) infected++;
-        else if (s === 3) recovered++;
-        else if (s === 4) removed++;
-      }
-    }
-    return { healthy, risk, infected, recovered, removed, cost };
+  // =========================================================================
+  // ШАГ
+  // =========================================================================
+  function stepOne() {
+    if (!baseline) return;
+    // ВАЖНО: интервенция должна получить те же случайные числа, что и baseline.
+    // Поэтому делаем шаг в baseline, потом в intervention — rand у них независимый,
+    // но инициализирован одним seed. Это гарантирует идентичный поток случайности.
+    stepScenario(baseline);
+    stepScenario(intervention);
+    renderAll();
   }
 
-  // --- Управление таймлайном ---
-  function switchScenario(sc) {
-    if (!result) return;
-    currentScenario = sc;
-    $("showBaseline").classList.toggle("active", sc === 'baseline');
-    $("showIntervention").classList.toggle("active", sc === 'intervention');
-    setDay(currentDay);
+  function startPlay() {
+    if (playing) return stopPlay();
+    playing = true;
+    $('playBtn').textContent = 'Пауза';
+    timer = setInterval(() => {
+      stepOne();
+    }, 500);
+  }
+  function stopPlay() {
+    playing = false;
+    if (timer) { clearInterval(timer); timer = null; }
+    $('playBtn').textContent = 'Play';
   }
 
-  function setDay(val) {
-    if (!result) return;
-    currentDay = Math.max(0, Math.min(totalDays(), Number(val)));
-    $("daySlider").value = currentDay;
-    $("dayLabel").textContent = `День ${currentDay} / ${totalDays()}`;
-    
-    const sc = currentScenario === 'baseline' ? result.baseline : result.intervention;
-    const frame = sc.frames[currentDay];
-    
-    renderGrid(frame.grid, frame.isolation_mask);
-    
-    $("viewTitle").textContent = `${currentScenario === 'baseline' ? 'Без вмешательства' : 'С вмешательством'} · День ${currentDay}`;
-    
-    if (currentDay === 0) {
-      $("viewSubtitle").textContent = "Начальное состояние.";
-    } else {
-      $("viewSubtitle").textContent = "Состояние после расчёта дня.";
-    }
+  function resetSession() {
+    stopPlay();
+    baseline = null;
+    intervention = null;
+    pendingSeeds = [];
+    $('startBtn').disabled = false;
+    $('prevBtn').disabled = true;
+    $('stepBtn').disabled = true;
+    $('playBtn').disabled = true;
+    $('resetBtn').disabled = true;
+    document.querySelectorAll('.tool-btn').forEach(b => b.disabled = b.dataset.tool !== 'seed');
+    $('isolateRadius').disabled = true;
+    document.querySelectorAll('#rows, #cols, #seed').forEach(el => el.disabled = false);
+    renderPreview();
+    showStatus('Сессия удалена.');
   }
 
-  function togglePlay() {
-    if (playTimer) {
-      resetPlayback();
-    } else {
-      $("playBtn").textContent = "Пауза";
-      if (currentDay >= totalDays()) setDay(0);
-      
-      playTimer = setInterval(() => {
-        setDay(currentDay + 1);
-        if (currentDay >= totalDays()) resetPlayback();
-      }, 500);
-    }
+  // =========================================================================
+  // UI-СОБЫТИЯ
+  // =========================================================================
+  function showStatus(msg, err = false) {
+    $('status').textContent = msg;
+    $('status').classList.toggle('error', err);
   }
 
-  function resetPlayback() {
-    if (playTimer) {
-      clearInterval(playTimer);
-      playTimer = null;
-    }
-    $("playBtn").textContent = "Play";
-  }
+  document.querySelectorAll('.tool-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentTool = btn.dataset.tool;
+    });
+  });
 
-  function resetTimeline() {
-    resetPlayback();
-    result = null;
-    currentDay = 0;
-    $("showBaseline").disabled = true;
-    $("showIntervention").disabled = true;
-    $("showBaseline").classList.remove("active");
-    $("showIntervention").classList.remove("active");
-    $("prevBtn").disabled = true;
-    $("nextBtn").disabled = true;
-    $("playBtn").disabled = true;
-    $("daySlider").disabled = true;
-    $("daySlider").value = 0;
-    $("dayLabel").textContent = `День 0 / ${totalDays()}`;
-    $("viewTitle").textContent = "Начальная сетка";
-  }
+  $('rows').addEventListener('input', () => { if (!baseline) renderPreview(); });
+  $('cols').addEventListener('input', () => { if (!baseline) renderPreview(); });
 
-  function showStatus(msg, isErr = false) {
-    const el = $("status");
-    el.textContent = msg;
-    el.classList.toggle("error", isErr);
-  }
+  $('startBtn').addEventListener('click', createSession);
+  $('resetBtn').addEventListener('click', resetSession);
+  $('stepBtn').addEventListener('click', stepOne);
+  $('playBtn').addEventListener('click', startPlay);
 
-  init();
+  // =========================================================================
+  // СТАРТ
+  // =========================================================================
+  renderPreview();
 })();
