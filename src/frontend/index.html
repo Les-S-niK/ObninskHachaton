@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Агроэпидемия · Симулятор теплицы</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <div class="eyebrow">Обнинский хакатон · кейс 03</div>
+        <h1>Агроэпидемия</h1>
+        <p class="muted">Живая симуляция с вмешательствами на любом кадре.</p>
+      </div>
+      <div class="tag">Учебная модель · не агрономический прогноз</div>
+    </header>
+
+    <div class="layout">
+      <!-- ЛЕВАЯ ПАНЕЛЬ -->
+      <aside class="panel">
+        <section class="section">
+          <h2>Параметры</h2>
+          <div class="fields">
+            <label>Строки<input id="rows" type="number" min="10" max="30" value="10" required></label>
+            <label>Столбцы<input id="cols" type="number" min="10" max="30" value="10" required></label>
+            <label>Seed<input id="seed" type="number" min="0" step="1" value="42" required></label>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>Вероятности за день</h2>
+          <div class="fields">
+            <label>Заражение<input id="infectionProb" type="number" min="0" max="1" step="0.01" value="0.15"></label>
+            <label>Выздоровление<input id="recoveryProb" type="number" min="0" max="1" step="0.01" value="0.05"></label>
+            <label class="wide">Естеств. удаление<input id="removalProb" type="number" min="0" max="1" step="0.01" value="0.03"></label>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>Стоимость мер (₽)</h2>
+          <div class="fields">
+            <label>Удаление<input id="costRemove" type="number" min="0" step="1" value="10"></label>
+            <label>Изоляция клетки<input id="costIsolate" type="number" min="0" step="1" value="2"></label>
+          </div>
+        </section>
+
+        <button id="startBtn" class="btn primary full">Создать сессию</button>
+        <div id="status" class="status" role="status"></div>
+      </aside>
+
+      <!-- ЦЕНТР -->
+      <main class="stage">
+        <!-- ПАНЕЛЬ ИНСТРУМЕНТОВ -->
+        <section class="toolbar-panel">
+          <div class="tool-group">
+            <button class="tool-btn active" data-tool="seed">Очаг</button>
+            <button class="tool-btn" data-tool="remove" disabled>Удалить</button>
+            <button class="tool-btn" data-tool="isolate" disabled>Изоляция</button>
+          </div>
+          <div class="tool-settings">
+            <label>Радиус изоляции: <input id="isolateRadius" type="number" min="0" max="5" value="1" disabled></label>
+          </div>
+        </section>
+
+        <!-- ДВЕ СЕТКИ РЯДОМ -->
+        <section class="grids-row">
+          <div class="panel grid-panel">
+            <div class="panel-heading">
+              <h2>Без вмешательства</h2>
+              <span class="day-badge" id="baselineDay">День 0</span>
+            </div>
+            <div class="grid-container">
+              <div id="gridBaseline" class="grid"></div>
+            </div>
+            <div class="metrics-mini">
+              <div><span>Здоровые</span><strong id="bHealthy">100</strong></div>
+              <div><span>Заражённые</span><strong id="bInfected">0</strong></div>
+              <div><span>Выздоровело</span><strong id="bRecovered">0</strong></div>
+              <div><span>Удалено</span><strong id="bRemoved">0</strong></div>
+            </div>
+          </div>
+
+          <div class="panel grid-panel">
+            <div class="panel-heading">
+              <h2>С вмешательством</h2>
+              <span class="day-badge" id="interventionDay">День 0</span>
+            </div>
+            <div class="grid-container">
+              <div id="gridIntervention" class="grid"></div>
+            </div>
+            <div class="metrics-mini">
+              <div><span>Здоровые</span><strong id="iHealthy">100</strong></div>
+              <div><span>Заражённые</span><strong id="iInfected">0</strong></div>
+              <div><span>Выздоровело</span><strong id="iRecovered">0</strong></div>
+              <div><span>Удалено</span><strong id="iRemoved">0</strong></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ТАЙМЛАЙН -->
+        <section class="panel timeline">
+          <div class="timeline-controls">
+            <button id="stepBtn" type="button" class="btn secondary small" disabled>Шаг +1 день</button>
+            <button id="playBtn" type="button" class="btn secondary small" disabled>Play</button>
+            <span id="dayLabel" class="day-label">День 0</span>
+            <button id="resetBtn" type="button" class="btn secondary small" disabled>Удалить сессию</button>
+          </div>
+        </section>
+
+        <!-- ГРАФИК + ЖУРНАЛ МЕР -->
+        <section class="chart-log-row">
+          <div class="panel chart-panel">
+            <div class="panel-heading">
+              <h2>Динамика заражений</h2>
+            </div>
+            <div class="chart-container">
+              <canvas id="diseaseChart"></canvas>
+            </div>
+          </div>
+
+          <div class="panel log-panel">
+            <div class="panel-heading">
+              <h2>Принятые меры</h2>
+              <span class="cost-badge" id="totalCost">0 ₽</span>
+            </div>
+            <div id="actionLog" class="action-log">
+              <p class="muted log-empty">Пока мер не принято.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ЛЕГЕНДА -->
+        <div class="legend-bar">
+          <span><i class="dot healthy"></i>Обычное</span>
+          <span><i class="dot risk"></i>Риск</span>
+          <span><i class="dot infected"></i>Заражённое</span>
+          <span><i class="dot recovered"></i>Выздоровело</span>
+          <span><i class="dot removed"></i>Удалено</span>
+          <span><i class="dot isolated"></i>Изоляция</span>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="ui.js"></script>
+</body>
+</html>
