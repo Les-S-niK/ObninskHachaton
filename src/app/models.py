@@ -29,7 +29,8 @@ class DiseaseParams(BaseModel):
 
 class RemoveInfectedIntervention(BaseModel):
     type: Literal["remove_infected"]
-    day: int = Field(..., ge=0)
+    day: int = Field(..., ge=1)
+    coord: Coord
     cost_per_plant: float = Field(..., ge=0)
 
 
@@ -54,7 +55,7 @@ class SimulateRequest(BaseModel):
     days: int = Field(..., ge=1, le=100)
     seed: int
     disease: DiseaseParams
-    interventions: list[Intervention] = Field(default_factory=list, max_length=10)
+    interventions: list[Intervention] = Field(default_factory=list, max_length=200)
 
     @field_validator("initial_infected")
     @classmethod
@@ -74,7 +75,13 @@ class SimulateRequest(BaseModel):
         for iv in self.interventions:
             if iv.day > self.days:
                 raise ValueError(f"intervention day {iv.day} exceeds days={self.days}")
-            if isinstance(iv, IsolateZoneIntervention):
+            if isinstance(iv, RemoveInfectedIntervention):
+                r, c = iv.coord
+                if not (0 <= r < self.rows and 0 <= c < self.cols):
+                    raise ValueError(
+                        f"remove_infected coord [{r}, {c}] is out of grid bounds"
+                    )
+            elif isinstance(iv, IsolateZoneIntervention):
                 r, c = iv.center
                 if not (0 <= r < self.rows and 0 <= c < self.cols):
                     raise ValueError(
