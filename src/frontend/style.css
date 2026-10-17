@@ -115,6 +115,12 @@ canvas.clickable {
     cursor: crosshair;
 }
 
+canvas.chart {
+    background: #888888;
+    width: 100%;
+    height: auto;
+}
+
 .metrics {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
@@ -159,7 +165,9 @@ canvas.clickable {
 
 .swatch.isolation {
     background: #fff;
-    background-image: repeating-linear-gradient(45deg, #8e24aa 0 1px, transparent 1px 4px);
+    background-image: repeating-linear-gradient(45deg,
+            #8e24aa 0 1px,
+            transparent 1px 4px);
 }
 
 .toolbar {

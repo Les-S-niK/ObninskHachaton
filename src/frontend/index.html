@@ -101,6 +101,26 @@
             </div>
 
             <div class="card">
+                <h3>Динамика по типам растений</h3>
+                <div class="grids">
+                    <div class="grid-box">
+                        <h3>Без вмешательства</h3>
+                        <canvas id="baselineChart" class="chart"></canvas>
+                    </div>
+                    <div class="grid-box">
+                        <h3>С вмешательствами</h3>
+                        <canvas id="interventionChart" class="chart"></canvas>
+                    </div>
+                </div>
+                <div class="legend">
+                    <span><span class="swatch" style="background: #ffffff"></span>здоровые</span>
+                    <span><span class="swatch" style="background: #e53935"></span>заражены</span>
+                    <span><span class="swatch" style="background: #4caf50"></span>выздоровели</span>
+                    <span><span class="swatch" style="background: #000000"></span>удалены</span>
+                </div>
+            </div>
+
+            <div class="card">
                 <h3>Журнал вмешательств</h3>
                 <div class="log" id="log"></div>
             </div>
