@@ -1,78 +1,110 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Агроэпидемия: Симулятор теплицы</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Агроэпидемия · Симулятор теплицы</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div class="app">
+    <!-- ЛЕВАЯ ПАНЕЛЬ -->
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>Агроэпидемия</h1>
+        <span>Кейс 03 · Симулятор</span>
+      </div>
 
-    <!-- Левая панель -->
-    <div class="sidebar">
-        <h2>Режим симуляции</h2>
+      <form id="controls">
+        <fieldset>
+          <legend>Параметры</legend>
+          <label>Строки <input id="rows" type="number" min="10" max="50" value="10" required></label>
+          <label>Столбцы <input id="cols" type="number" min="10" max="50" value="10" required></label>
+          <label>Дни <input id="days" type="number" min="1" max="100" value="20" required></label>
+          <label>Seed (фикс.) <input id="seed" type="number" min="0" value="42" required></label>
+        </fieldset>
 
-        <!-- Две кнопки режима в одном ряду -->
-        <div class="mode-row">
-            <button class="btn-mode active" id="btn-none" onclick="setMode('none')">
-                Без вмешательства
-            </button>
-            <button class="btn-mode" id="btn-measure" onclick="setMode('measure')">
-                С вмешательством
-            </button>
+        <fieldset>
+          <legend>Вероятности за день</legend>
+          <label>Заражение <input id="infectionProb" type="number" min="0" max="1" step="0.01" value="0.15"></label>
+          <label>Выздоровление <input id="recoveryProb" type="number" min="0" max="1" step="0.01" value="0.05"></label>
+          <label>Естественное удаление <input id="removalProb" type="number" min="0" max="1" step="0.01" value="0.03"></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Стоимость мер (₽)</legend>
+          <label>Выкапывание <input id="costRemove" type="number" min="0" step="1" value="10"></label>
+          <label>Изоляция (клетка) <input id="costIsolate" type="number" min="0" step="1" value="2"></label>
+        </fieldset>
+
+        <button id="runBtn" type="submit" class="btn btn-primary">Запустить сравнение</button>
+        <div id="status" class="status"></div>
+      </form>
+    </aside>
+
+    <!-- ЦЕНТР -->
+    <main class="main-content">
+      <div class="toolbar">
+        <div class="title-block">
+          <h2 id="viewTitle">Начальная сетка</h2>
+          <p id="viewSubtitle">Кликните по клетке, чтобы применить меру.</p>
         </div>
+        <button id="editSeeds" type="button" class="btn btn-outline">Режим очагов</button>
+      </div>
 
-        <button class="btn-new" onclick="runSimulation()">Запустить симуляцию</button>
-        <button class="btn-new btn-danger" onclick="resetSimulation()">Сброс</button>
+      <div class="grid-container">
+        <div id="grid" class="grid"></div>
+      </div>
 
-        <div class="sidebar-footer">
-            <p><b>Статус:</b> <span id="status-text">Ожидание</span></p>
-            <p class="disclaimer">
-                * Модель предназначена исключительно для обучения алгоритмам. 
-                Не является инструментом принятия решений о реальных обработках.
-            </p>
+      <div class="legend-bar">
+        <span><i class="sw healthy"></i>Обычное</span>
+        <span><i class="sw risk"></i>Риск</span>
+        <span><i class="sw infected"></i>Заражённое</span>
+        <span><i class="sw recovered"></i>Выздоровело</span>
+        <span><i class="sw removed"></i>Выкопали</span>
+        <span><i class="sw isolated"></i>Изоляция</span>
+      </div>
+
+      <div class="timeline-panel">
+        <div class="scenario-switch">
+          <button id="showBaseline" class="btn btn-tab" disabled>Без вмешательства</button>
+          <button id="showIntervention" class="btn btn-tab" disabled>С вмешательством</button>
         </div>
+        <div class="timeline-controls">
+          <button id="prevBtn" class="btn btn-icon" disabled>◀</button>
+          <input id="daySlider" type="range" min="0" max="20" value="0" disabled>
+          <button id="nextBtn" class="btn btn-icon" disabled>▶</button>
+          <button id="playBtn" class="btn btn-outline" disabled>Play</button>
+          <span id="dayLabel" class="day-label">День 0 / 20</span>
+        </div>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="metric"><span>Обычные</span><strong id="mHealthy">0</strong></div>
+        <div class="metric"><span>Риск</span><strong id="mRisk">0</strong></div>
+        <div class="metric"><span>Зараженные</span><strong id="mInfected">0</strong></div>
+        <div class="metric"><span>Выздоровело</span><strong id="mRecovered">0</strong></div>
+        <div class="metric"><span>Выкопали</span><strong id="mRemoved">0</strong></div>
+        <div class="metric"><span>Расходы, ₽</span><strong id="mCost">0</strong></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Контекстное меню -->
+  <div id="cellMenu" class="cell-menu hidden">
+    <div class="menu-title">Клетка <span id="menuCoord"></span></div>
+    <button id="menuRemove" class="btn btn-danger">Выкопать (<span id="menuRemoveCost">10</span> ₽)</button>
+    <div class="menu-divider"></div>
+    <div class="menu-label">Обезопасить зону</div>
+    <div class="radius-input">
+      <label>Радиус</label>
+      <input id="menuRadius" type="number" min="0" max="5" value="1">
     </div>
+    <div class="menu-preview">Стоимость: <span id="menuIsolateCost">0</span> ₽</div>
+    <button id="menuIsolate" class="btn btn-primary">Применить</button>
+    <button id="menuCancel" class="btn btn-text">Отмена</button>
+  </div>
 
-    <!-- Центр: сетка и таймлайн -->
-    <div class="main-content">
-        <h2 class="main-title">Теплица 10×10</h2>
-        <div class="greenhouse-grid" id="grid"></div>
-
-        <div class="timeline">
-            <button class="btn-arrow" onclick="prevDay()" id="btn-prev" disabled>◀</button>
-            <div class="day-display">День: <span id="current-day">0</span> / 20</div>
-            <input type="range" id="day-slider" min="0" max="20" value="0" oninput="goToDay(this.value)" disabled>
-            <button class="btn-arrow" onclick="nextDay()" id="btn-next" disabled>▶</button>
-        </div>
-
-        <div class="legend">
-            <div class="legend-item"><div class="legend-color healthy"></div> Обычное</div>
-            <div class="legend-item"><div class="legend-color risk"></div> Риск</div>
-            <div class="legend-item"><div class="legend-color infected"></div> Заразное</div>
-            <div class="legend-item"><div class="legend-color recovered"></div> Выздоровело</div>
-            <div class="legend-item"><div class="legend-color removed"></div> Выкопали</div>
-        </div>
-    </div>
-
-    <!-- Правая панель -->
-    <div class="stats-panel">
-        <h2>Статистика дня</h2>
-        <div class="stat-item"><span>Обычные:</span> <span class="stat-value" id="stat-healthy">100</span></div>
-        <div class="stat-item"><span>В зоне риска:</span> <span class="stat-value" id="stat-risk">0</span></div>
-        <div class="stat-item"><span>Заразные:</span> <span class="stat-value" id="stat-infected">0</span></div>
-        <div class="stat-item"><span>Выздоровело:</span> <span class="stat-value" id="stat-recovered">0</span></div>
-        <div class="stat-item"><span>Выкопали:</span> <span class="stat-value" id="stat-removed">0</span></div>
-        <div class="stat-item"><span>Расходы:</span> <span class="stat-value" id="stat-cost">0</span></div>
-
-        <h3>Динамика за 20 дней</h3>
-        <div class="chart-container">
-            <canvas id="infectionChart"></canvas>
-        </div>
-    </div>
-
-    <script src="logic.js"></script>
-    <script src="ui.js"></script>
+  <script src="ui.js"></script>
 </body>
 </html>
